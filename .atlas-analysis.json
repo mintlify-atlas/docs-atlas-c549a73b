@@ -1,0 +1,134 @@
+{
+  "projectType": "framework",
+  "projectName": "S-PHP",
+  "projectDescription": "A lightweight MVC PHP framework for building scalable web applications with built-in authentication and CLI tools",
+  "theme": "mint",
+  "primaryColor": "#7C3AED",
+  "lightColor": "#A78BFA",
+  "darkColor": "#5B21B6",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Getting Started",
+            "pages": [
+              "introduction",
+              "installation",
+              "quickstart"
+            ]
+          },
+          {
+            "group": "Core Concepts",
+            "pages": [
+              "architecture/mvc-pattern",
+              "architecture/routing",
+              "architecture/middleware",
+              "architecture/request-lifecycle"
+            ]
+          },
+          {
+            "group": "Building Applications",
+            "pages": [
+              "guides/controllers",
+              "guides/models",
+              "guides/views",
+              "guides/database",
+              "guides/authentication"
+            ]
+          },
+          {
+            "group": "CLI Commands",
+            "pages": [
+              "cli/overview",
+              "cli/server",
+              "cli/generators",
+              "cli/migrations"
+            ]
+          },
+          {
+            "group": "Advanced",
+            "pages": [
+              "advanced/job-queue",
+              "advanced/email",
+              "advanced/events",
+              "advanced/security"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "Core Classes",
+            "pages": [
+              "api/router",
+              "api/controller",
+              "api/model",
+              "api/view",
+              "api/database"
+            ]
+          },
+          {
+            "group": "Services",
+            "pages": [
+              "api/auth",
+              "api/jwt",
+              "api/mailer",
+              "api/job-queue"
+            ]
+          },
+          {
+            "group": "Helpers",
+            "pages": [
+              "api/request",
+              "api/response",
+              "api/helpers"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "MVC Architecture",
+    "Flexible Routing with Dynamic Parameters",
+    "Built-in JWT Authentication",
+    "Database Query Builder",
+    "View Templating with Layouts and Components",
+    "Middleware Support",
+    "CLI Command Tool",
+    "Job Queue System",
+    "SMTP Email Service",
+    "CSRF Protection"
+  ],
+  "publicApiSurface": [
+    "Sphp\\Core\\Router",
+    "Sphp\\Core\\Controller",
+    "Sphp\\Core\\Models",
+    "Sphp\\Core\\View",
+    "Sphp\\Core\\Database",
+    "Sphp\\Core\\Request",
+    "Sphp\\Core\\Response",
+    "Sphp\\Services\\Auth",
+    "Sphp\\Services\\JwtAuthService",
+    "Sphp\\Services\\SMTPMailer",
+    "Sphp\\Services\\Event",
+    "Command::execute()",
+    "Router::get()",
+    "Router::post()",
+    "Router::dispatch()",
+    "Models::create()",
+    "Models::update()",
+    "Models::delete()",
+    "Models::select()",
+    "Models::findByID()",
+    "View::render()",
+    "Auth::login()",
+    "Auth::logout()",
+    "Auth::user()",
+    "Auth::check()"
+  ]
+}
