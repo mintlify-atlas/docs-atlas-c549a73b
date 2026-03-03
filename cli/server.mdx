@@ -1,0 +1,94 @@
+---
+title: 'Server Commands'
+description: 'Start and manage the S-PHP development server'
+---
+
+# Server Commands
+
+S-PHP provides CLI commands to manage your development environment and run background services.
+
+## Start Development Server
+
+The `up` command starts PHP's built-in web server for local development:
+
+```bash
+php do up
+```
+
+### How It Works
+
+This command (Command.php:17) executes:
+
+```bash
+cd public && php -S localhost:8000
+```
+
+### Server Details
+
+- **Host**: localhost
+- **Port**: 8000
+- **Document Root**: `public/` directory
+- **Access URL**: http://localhost:8000
+
+### Output
+
+When you run the command, you'll see:
+
+```
+🚀 Running: cd public && php -S localhost:8000
+PHP 8.x Development Server (http://localhost:8000) started
+```
+
+### Usage Notes
+
+- The server runs in the foreground and displays real-time request logs
+- Press `Ctrl+C` to stop the server
+- The server automatically serves files from the `public/` directory
+- Index files (`index.php`) are automatically served for directory requests
+
+### Example Session
+
+```bash
+$ php do up
+🚀 Running: cd public && php -S localhost:8000
+PHP 8.2.0 Development Server (http://localhost:8000) started
+[Tue Mar 03 10:15:23 2026] PHP 8.2.0 Development Server (http://localhost:8000) started
+[Tue Mar 03 10:15:28 2026] [::1]:54321 Accepted
+[Tue Mar 03 10:15:28 2026] [::1]:54321 [200]: GET /
+[Tue Mar 03 10:15:28 2026] [::1]:54321 Closing
+```
+
+## Run Job Worker
+
+The `work` command starts the background job worker:
+
+```bash
+php do work
+```
+
+### How It Works
+
+This command (Command.php:18) executes:
+
+```bash
+php app/services/work
+```
+
+The worker process handles queued jobs and background tasks defined in your application.
+
+### Use Cases
+
+- Processing queued emails
+- Running scheduled tasks
+- Handling long-running background operations
+- Processing asynchronous jobs
+
+### Running in Production
+
+For production environments, consider using a process manager like:
+
+- **systemd** (Linux)
+- **Supervisor** (cross-platform)
+- **PM2** (if running alongside Node.js)
+
+This ensures the worker restarts automatically if it crashes and runs continuously in the background.

@@ -1,0 +1,285 @@
+---
+title: 'Email'
+description: 'Send emails using SMTP in S-PHP'
+---
+
+## Overview
+
+S-PHP provides a robust email system with SMTP support, template rendering, and job queue integration. The framework includes two main services:
+
+- `SMTPMailer` - Low-level SMTP client
+- `SendMail` - High-level email service with templates
+
+## Configuration
+
+### Environment Variables
+
+Configure SMTP settings in your `.env` file:
+
+```bash
+MAIL_HOST=smtp.gmail.com
+MAIL_PORT=587
+MAIL_USERNAME=your-email@gmail.com
+MAIL_PASSWORD=your-app-password
+```
+
+### Required Settings
+
+All four configuration values are required:
+- `MAIL_HOST` - SMTP server hostname
+- `MAIL_PORT` - SMTP server port (typically 587 for TLS)
+- `MAIL_USERNAME` - SMTP authentication username
+- `MAIL_PASSWORD` - SMTP authentication password
+
+If any value is missing, an exception will be thrown with details about which variables are not set.
+
+## Using SendMail Service
+
+The recommended way to send emails with template support:
+
+### Basic Usage
+
+```php
+use App\Services\SendMail;
+
+SendMail::sendMail(
+    'recipient@example.com',
+    'Welcome to Our Platform',
+    'welcome',
+    ['name' => 'John Doe', 'email' => 'john@example.com']
+);
+```
+
+### Parameters
+
+- `$to` - Recipient email address
+- `$subject` - Email subject line
+- `$templateName` - Name of the template file (without .php extension)
+- `$data` - Associative array of data to pass to the template
+
+### Email Templates
+
+Create email templates in:
+```
+app/views/mail/
+```
+
+**Example template** (`app/views/mail/welcome.php`):
+
+```php
+<!DOCTYPE html>
+<html>
+<head>
+    <style>
+        body { font-family: Arial, sans-serif; }
+        .header { background: #4CAF50; color: white; padding: 20px; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>Welcome <?= htmlspecialchars($name) ?>!</h1>
+    </div>
+    <p>Thank you for joining our platform.</p>
+    <p>Your email: <?= htmlspecialchars($email) ?></p>
+</body>
+</html>
+```
+
+### Template Rendering
+
+Templates:
+- Must be PHP files in `app/views/mail/`
+- Receive `$data` array variables via `extract()`
+- Support full HTML markup
+- Should use `htmlspecialchars()` for XSS protection
+
+## Using SMTPMailer Directly
+
+For direct SMTP control without templates:
+
+### Basic Usage
+
+```php
+use Sphp\Services\SMTPMailer;
+
+$mailer = SMTPMailer::getInstance();
+
+$mailer->sendEmail(
+    'from@example.com',
+    'to@example.com',
+    'Subject Line',
+    '<h1>HTML Email Body</h1><p>Content here</p>'
+);
+```
+
+### Features
+
+- **Singleton Pattern** - Single instance for all email operations
+- **TLS Encryption** - Automatic STARTTLS support
+- **Email Validation** - Validates sender and recipient addresses
+- **Error Handling** - Throws exceptions with detailed error messages
+
+## SMTP Connection Process
+
+The SMTPMailer handles the full SMTP protocol:
+
+1. **Connect** - Opens socket connection to SMTP server
+2. **HELO** - Sends initial greeting
+3. **STARTTLS** - Initiates TLS encryption
+4. **Upgrade Connection** - Enables crypto on the socket
+5. **HELO** - Sends greeting again after TLS
+6. **AUTH LOGIN** - Authenticates with username/password
+7. **MAIL FROM** - Specifies sender
+8. **RCPT TO** - Specifies recipient
+9. **DATA** - Sends email content
+10. **QUIT** - Closes connection
+
+## Email Format
+
+Emails are sent with these headers:
+
+```
+Subject: Your Subject
+From: from@example.com
+To: to@example.com
+Date: Mon, 03 Mar 2026 10:30:00 +0000
+Content-Type: text/html; charset=UTF-8
+```
+
+## Job Queue Integration
+
+The `SendMail` service automatically:
+1. Creates a job for the email
+2. Adds it to the job queue
+3. Executes the job immediately
+
+This allows for:
+- Deferred email sending
+- Better error handling
+- Session message management
+
+```php
+// Internally, SendMail creates a job:
+$jobQueue->addJob(new Job('Send Email', [
+    'email' => $to,
+    'subject' => $subject,
+    'message' => $renderedTemplate,
+    'is_html' => true
+]));
+
+$jobQueue->executeJobs();
+```
+
+## Error Handling
+
+### SMTPMailer Exceptions
+
+The mailer throws exceptions for:
+
+```php
+try {
+    $mailer->sendEmail($from, $to, $subject, $body);
+} catch (Exception $e) {
+    // Handle errors:
+    // - Invalid email format
+    // - SMTP connection failed
+    // - Authentication failed
+    // - SMTP protocol errors
+    error_log("Email error: " . $e->getMessage());
+}
+```
+
+### Common Errors
+
+- **"SMTP configuration is incomplete"** - Missing env variables
+- **"Invalid email address format"** - Email validation failed
+- **"SMTP connection failed"** - Cannot connect to server
+- **"Failed to start TLS encryption"** - TLS negotiation failed
+- **"SMTP error - Expected 235"** - Authentication failed
+
+## Email Validation
+
+All email addresses are validated using PHP's `FILTER_VALIDATE_EMAIL`:
+
+```php
+private function isValidEmail($email)
+{
+    return filter_var($email, FILTER_VALIDATE_EMAIL) !== false;
+}
+```
+
+## Connection Management
+
+### Auto-Disconnect
+
+Connections are automatically closed:
+- After each email is sent
+- When the mailer instance is destroyed
+- On errors (via finally block)
+
+### Timeout Settings
+
+Default timeout is 30 seconds:
+
+```php
+private $timeout = 30;
+```
+
+## Best Practices
+
+1. **Use Templates** - Prefer `SendMail` over direct `SMTPMailer` usage
+2. **Secure Credentials** - Never hardcode SMTP passwords
+3. **App Passwords** - Use app-specific passwords for Gmail
+4. **HTML Sanitization** - Always escape user data in templates
+5. **Error Logging** - Log email errors for debugging
+6. **Test Mode** - Use a test SMTP server during development
+
+## Gmail Configuration
+
+For Gmail SMTP:
+
+```bash
+MAIL_HOST=smtp.gmail.com
+MAIL_PORT=587
+MAIL_USERNAME=yourname@gmail.com
+MAIL_PASSWORD=your-16-char-app-password
+```
+
+**Important:** Generate an App Password in your Google Account settings:
+1. Enable 2-Factor Authentication
+2. Go to Security > App passwords
+3. Generate a password for "Mail"
+4. Use that 16-character password in `.env`
+
+## Example: Password Reset Email
+
+```php
+use App\Services\SendMail;
+
+function sendPasswordReset($userEmail, $resetToken)
+{
+    SendMail::sendMail(
+        $userEmail,
+        'Reset Your Password',
+        'password-reset',
+        [
+            'resetUrl' => "https://example.com/reset?token=$resetToken",
+            'expiresIn' => '1 hour'
+        ]
+    );
+}
+```
+
+**Template** (`app/views/mail/password-reset.php`):
+
+```php
+<!DOCTYPE html>
+<html>
+<body>
+    <h2>Reset Your Password</h2>
+    <p>Click the link below to reset your password:</p>
+    <a href="<?= htmlspecialchars($resetUrl) ?>">Reset Password</a>
+    <p>This link expires in <?= htmlspecialchars($expiresIn) ?>.</p>
+</body>
+</html>
+```

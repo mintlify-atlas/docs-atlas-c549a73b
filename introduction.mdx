@@ -1,0 +1,106 @@
+---
+title: S-PHP Framework
+description: A lightweight, simple MVC PHP framework designed to help developers build scalable and maintainable web applications
+---
+
+<img src="/logo.png" alt="S-PHP Logo" width="100" height="auto" />
+
+**S-PHP** is a lightweight, simple MVC (Model-View-Controller) PHP framework designed to help developers build scalable and maintainable web applications. It's perfect for those who need a quick start without the complexity of heavier frameworks.
+
+## Why S-PHP?
+
+S-PHP offers the perfect balance between simplicity and functionality. Built with modern PHP standards, it provides everything you need to create robust web applications without the overhead of larger frameworks.
+
+<CardGroup cols={2}>
+  <Card title="Lightweight architecture" icon="feather">
+    Minimalistic design with only the core MVC features you need. No bloat, just pure functionality.
+  </Card>
+  
+  <Card title="Easy setup" icon="rocket">
+    No complex configurations required. Clone the repository and start building in minutes.
+  </Card>
+  
+  <Card title="Flexible routing" icon="route">
+    Handles URL-to-controller mappings effortlessly with support for dynamic routes and parameters.
+  </Card>
+  
+  <Card title="MVC architecture" icon="sitemap">
+    Clean separation of concerns with Models, Views, and Controllers for maintainable code.
+  </Card>
+  
+  <Card title="Powerful CLI" icon="terminal">
+    Built-in command-line tool to generate controllers, models, middleware, and more.
+  </Card>
+  
+  <Card title="Extensible" icon="puzzle-piece">
+    Easily extendable with additional features. Add middleware, custom services, and more.
+  </Card>
+</CardGroup>
+
+## Key features
+
+### Simple routing
+
+Define routes with an intuitive, expressive syntax:
+
+```php
+$router->get('/', HomeController::class, 'index');
+$router->post('/login', AuthController::class, 'login');
+```
+
+### Middleware support
+
+Protect routes and add functionality with middleware:
+
+```php
+$router->get('/dashboard', DashboardController::class, 'index', AuthMiddleware::class);
+```
+
+### Template engine
+
+Render views with built-in support for layouts and components:
+
+```php
+View::render('home.index', ['user' => $user]);
+```
+
+### CLI commands
+
+Generate boilerplate code instantly:
+
+```bash
+php do controller UserController
+php do model User
+php do middleware AuthMiddleware
+```
+
+## Requirements
+
+<Note>
+  S-PHP requires PHP 8.1 or higher with the `mbstring` and `pdo` extensions enabled.
+</Note>
+
+- **PHP**: 8.1 or higher
+- **Extensions**: `ext-mbstring`, `ext-pdo`
+- **Web server**: Apache, Nginx, or PHP built-in server
+- **Composer**: For dependency management
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Installation" icon="download" href="/installation">
+    Get S-PHP installed and running on your system
+  </Card>
+  
+  <Card title="Quick start" icon="bolt" href="/quickstart">
+    Build your first application in minutes
+  </Card>
+</CardGroup>
+
+## Community and support
+
+S-PHP is an open-source project inspired by Laravel's elegance and simplicity. Contributions are welcome!
+
+<Tip>
+  Found a bug or have a feature request? Visit the [GitHub repository](https://github.com/PranabZz/S-PHP) to open an issue or submit a pull request.
+</Tip>

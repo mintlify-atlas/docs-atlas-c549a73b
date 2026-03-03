@@ -1,0 +1,191 @@
+---
+title: 'Router'
+description: 'API reference for the Router class'
+---
+
+# Router
+
+The Router class handles HTTP routing for GET and POST requests, supporting dynamic route parameters and middleware integration.
+
+## Namespace
+
+```php
+Sphp\Core\Router
+```
+
+## Methods
+
+### get()
+
+Registers a GET route with a controller, method, and optional middleware.
+
+```php
+public function get($route, $controller, $method, $middelware = null)
+```
+
+<ParamField path="route" type="string" required>
+  The URL endpoint pattern (supports dynamic parameters like `/edit/{id}`)
+</ParamField>
+
+<ParamField path="controller" type="string" required>
+  The fully qualified controller class name
+</ParamField>
+
+<ParamField path="method" type="string" required>
+  The controller method to invoke
+</ParamField>
+
+<ParamField path="middelware" type="string" default="null">
+  Optional middleware class name to execute before the controller
+</ParamField>
+
+#### Example
+
+```php
+$router = new Router();
+$router->get('/home', 'App\\Controllers\\HomeController', 'index');
+$router->get('/user/{id}', 'App\\Controllers\\UserController', 'show', 'App\\Middleware\\AuthMiddleware');
+```
+
+---
+
+### post()
+
+Registers a POST route with a controller, method, and optional middleware.
+
+```php
+public function post($route, $controller, $method, $middelware = null)
+```
+
+<ParamField path="route" type="string" required>
+  The URL endpoint pattern (supports dynamic parameters like `/update/{id}`)
+</ParamField>
+
+<ParamField path="controller" type="string" required>
+  The fully qualified controller class name
+</ParamField>
+
+<ParamField path="method" type="string" required>
+  The controller method to invoke
+</ParamField>
+
+<ParamField path="middelware" type="string" default="null">
+  Optional middleware class name to execute before the controller
+</ParamField>
+
+#### Example
+
+```php
+$router->post('/login', 'App\\Controllers\\AuthController', 'authenticate');
+$router->post('/user/{id}/update', 'App\\Controllers\\UserController', 'update');
+```
+
+---
+
+### dispatch()
+
+Dispatches the request to the appropriate controller based on the current HTTP method and URI.
+
+```php
+public function dispatch()
+```
+
+<ResponseField name="void" type="void">
+  This method handles the routing logic internally and either:
+  - Executes the matched route's controller method
+  - Renders a 404 page if no route matches
+  - Renders a 403 page if middleware denies access
+</ResponseField>
+
+#### Behavior
+
+- Extracts `REQUEST_METHOD` and `REQUEST_URI` from the server
+- Strips query strings from the URI
+- Matches dynamic routes with placeholders (e.g., `/user/{id}`)
+- Passes extracted parameters to the controller method
+- Tracks previous and current URLs in session
+- Sanitizes POST data (except for `content` field)
+- Renders `404.html` if no route matches
+
+#### Example
+
+```php
+$router = new Router();
+$router->get('/home', 'HomeController', 'index');
+$router->post('/submit', 'FormController', 'handle');
+$router->dispatch();
+```
+
+---
+
+### matchDynamicRoute()
+
+Matches a defined route pattern against the current request URI and extracts parameters.
+
+```php
+private function matchDynamicRoute($definedRoute, $currentRoute, &$params)
+```
+
+<ParamField path="definedRoute" type="string" required>
+  The route pattern with placeholders (e.g., `/user/{id}/post/{postId}`)
+</ParamField>
+
+<ParamField path="currentRoute" type="string" required>
+  The actual requested URI path
+</ParamField>
+
+<ParamField path="params" type="array" required>
+  Passed by reference - will be populated with extracted route parameters
+</ParamField>
+
+<ResponseField name="matched" type="bool">
+  Returns `true` if the route matches, `false` otherwise
+</ResponseField>
+
+#### How It Works
+
+1. Converts route placeholders `{param}` to regex capture groups `([^/]+)`
+2. Performs regex match against the current route
+3. Extracts matched parameters into the `$params` array
+4. Returns `true` on successful match
+
+#### Example
+
+```php
+// Defined route: /user/{id}/post/{postId}
+// Current route: /user/42/post/123
+// Result: $params = ['42', '123']
+```
+
+---
+
+## Properties
+
+### Private Properties
+
+```php
+private $getRoutes = [];
+private $postRoutes = [];
+```
+
+- **$getRoutes**: Stores all registered GET routes as an associative array
+- **$postRoutes**: Stores all registered POST routes as an associative array
+
+## Middleware Support
+
+Middleware classes must implement a `handle()` method that returns:
+- `true` to allow the request to proceed
+- `false` to deny access (renders 403.html)
+- Any other value to redirect to the previous URL
+
+```php
+namespace App\Middleware;
+
+class AuthMiddleware
+{
+    public function handle()
+    {
+        return isset($_SESSION['user_id']);
+    }
+}
+```

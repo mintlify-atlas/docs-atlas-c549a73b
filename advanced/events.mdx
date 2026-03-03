@@ -1,0 +1,329 @@
+---
+title: 'Events'
+description: 'Event-driven programming in S-PHP'
+---
+
+## Overview
+
+The Event system in S-PHP provides a simple way to implement event-driven architecture in your application. You can register listeners for specific events and dispatch those events when needed.
+
+## Basic Usage
+
+### Registering Event Listeners
+
+Use the `Event::handle()` method to register a callback for an event:
+
+```php
+use Sphp\Services\Event;
+
+Event::handle('user.registered', function() {
+    echo "New user registered!";
+});
+```
+
+### Dispatching Events
+
+Trigger an event using `Event::dispatch()`:
+
+```php
+Event::dispatch('user.registered');
+```
+
+This will execute all registered callbacks for the `user.registered` event.
+
+## Event Priorities
+
+### Setting Priority
+
+Listeners can have priority levels (higher numbers execute first):
+
+```php
+Event::handle('app.boot', function() {
+    echo "Low priority (1)";
+}, 1);
+
+Event::handle('app.boot', function() {
+    echo "High priority (10)";
+}, 10);
+
+Event::dispatch('app.boot');
+// Output:
+// High priority (10)
+// Low priority (1)
+```
+
+### Default Priority
+
+If no priority is specified, the default is `1`:
+
+```php
+// These are equivalent:
+Event::handle('event.name', $callback);
+Event::handle('event.name', $callback, 1);
+```
+
+## Event with Jobs
+
+You can dispatch events with job instances:
+
+```php
+use App\Services\Job;
+use Sphp\Services\Event;
+
+$job = new Job('Send Email', [
+    'email' => 'user@example.com',
+    'subject' => 'Welcome',
+    'message' => '<h1>Hello!</h1>'
+]);
+
+Event::dispatch('email.queued', $job);
+```
+
+When a job is passed:
+- The job is executed automatically
+- All registered callbacks are still invoked
+- The job's task name is displayed in output
+
+## Multiple Listeners
+
+Register multiple callbacks for the same event:
+
+```php
+Event::handle('order.created', function() {
+    echo "Send confirmation email";
+}, 10);
+
+Event::handle('order.created', function() {
+    echo "Update inventory";
+}, 5);
+
+Event::handle('order.created', function() {
+    echo "Log order";
+}, 1);
+
+Event::dispatch('order.created');
+// Executes in priority order: 10, 5, 1
+```
+
+## Event Naming Conventions
+
+Use descriptive, dot-separated event names:
+
+```php
+// Good naming:
+Event::handle('user.registered', $callback);
+Event::handle('user.login', $callback);
+Event::handle('order.created', $callback);
+Event::handle('payment.processed', $callback);
+Event::handle('email.sent', $callback);
+
+// Avoid:
+Event::handle('event1', $callback);
+Event::handle('doSomething', $callback);
+```
+
+## Common Event Patterns
+
+### User Events
+
+```php
+// User registration
+Event::handle('user.registered', function() {
+    // Send welcome email
+    // Create user profile
+    // Log registration
+});
+
+// User login
+Event::handle('user.login', function() {
+    // Update last login time
+    // Log login activity
+});
+
+// User logout
+Event::handle('user.logout', function() {
+    // Clear session data
+    // Log logout activity
+});
+```
+
+### Application Events
+
+```php
+// Application startup
+Event::handle('app.boot', function() {
+    // Initialize services
+    // Load configuration
+}, 10);
+
+// Request handling
+Event::handle('request.received', function() {
+    // Log request
+    // Validate input
+});
+
+// Response sent
+Event::handle('response.sent', function() {
+    // Clean up resources
+    // Log response time
+});
+```
+
+### Data Events
+
+```php
+// Before save
+Event::handle('model.saving', function() {
+    // Validate data
+    // Set timestamps
+}, 10);
+
+// After save
+Event::handle('model.saved', function() {
+    // Clear cache
+    // Trigger notifications
+});
+
+// Before delete
+Event::handle('model.deleting', function() {
+    // Check dependencies
+    // Archive data
+});
+```
+
+## Event Class API
+
+### handle()
+
+Register an event listener:
+
+```php
+Event::handle(string $event, callable $callback, int $priority = 1)
+```
+
+**Parameters:**
+- `$event` - Event name (string)
+- `$callback` - Function to execute (callable)
+- `$priority` - Execution priority (int, default: 1)
+
+### dispatch()
+
+Trigger an event:
+
+```php
+Event::dispatch(string $event, Job $job = null)
+```
+
+**Parameters:**
+- `$event` - Event name (string)
+- `$job` - Optional Job instance to execute
+
+## Debug Output
+
+The Event system outputs debug information:
+
+```php
+Event::handle('test.event', function() {
+    echo "Handler executed";
+}, 5);
+
+Event::dispatch('test.event');
+```
+
+**Output:**
+```
+Dispatching event: test.event
+Executing callback with priority 5
+Handler executed
+```
+
+If no listeners are registered:
+```
+No listeners found for event: unknown.event
+```
+
+## Example: Complete Event System
+
+```php
+use Sphp\Services\Event;
+use App\Services\SendMail;
+
+// Register listeners during app initialization
+class EventServiceProvider
+{
+    public static function register()
+    {
+        // User events
+        Event::handle('user.registered', function() {
+            // Send welcome email
+        }, 10);
+        
+        Event::handle('user.registered', function() {
+            // Create default settings
+        }, 5);
+        
+        // Order events
+        Event::handle('order.created', function() {
+            // Send confirmation
+        }, 10);
+        
+        Event::handle('order.created', function() {
+            // Update inventory
+        }, 5);
+        
+        Event::handle('order.created', function() {
+            // Log transaction
+        }, 1);
+    }
+}
+
+// Initialize events on app boot
+EventServiceProvider::register();
+
+// Dispatch events in your application
+function registerUser($userData)
+{
+    // Save user to database
+    $user = User::create($userData);
+    
+    // Trigger event
+    Event::dispatch('user.registered');
+    
+    return $user;
+}
+```
+
+## Best Practices
+
+1. **Descriptive Names** - Use clear, dot-separated event names
+2. **Priority Levels** - Use priorities to control execution order
+3. **Decouple Logic** - Keep event handlers independent
+4. **Error Handling** - Wrap handlers in try-catch blocks
+5. **Document Events** - Maintain a list of available events
+
+## Limitations
+
+- Events do not pass data to callbacks (use closures or jobs instead)
+- No event cancellation or stopPropagation
+- Debug output is always enabled
+- Events are not persisted between requests
+
+## Future Enhancements
+
+Potential improvements:
+
+```php
+// Pass data to listeners
+Event::dispatch('user.registered', $job, ['userId' => 123]);
+
+// Stop propagation
+Event::handle('process.data', function($event) {
+    $event->stopPropagation();
+});
+
+// Remove listeners
+Event::remove('event.name');
+
+// One-time listeners
+Event::once('app.boot', $callback);
+```

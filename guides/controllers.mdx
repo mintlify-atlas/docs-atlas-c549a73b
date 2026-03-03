@@ -1,0 +1,191 @@
+---
+title: Controllers
+description: Learn how to create and use controllers in S-PHP framework
+---
+
+## Overview
+
+Controllers handle incoming HTTP requests and return responses to the user. In S-PHP, controllers extend the base `Controller` class and have automatic access to the database and environment configuration.
+
+## Creating a Controller
+
+Controllers are located in the `app/Controllers` directory and extend the `Sphp\Core\Controller` class.
+
+```php app/Controllers/HomeController.php
+<?php
+
+namespace App\Controllers;
+
+use Sphp\Core\Controller;
+use Sphp\Core\View;
+use App\Models\Users;
+
+class HomeController extends Controller
+{
+    protected $user;
+    
+    public function __construct()
+    {
+        parent::__construct();
+        $this->user = new Users();
+    }
+    
+    public function index()
+    {
+        View::render('welcome.php');
+    }
+}
+```
+
+## Base Controller Class
+
+The `Controller` class provides two essential properties that are automatically available in all controllers:
+
+<ParamField path="$env" type="array">
+  Environment configuration loaded from `app/config/config.php`
+</ParamField>
+
+<ParamField path="$db" type="Database">
+  Database instance for executing queries
+</ParamField>
+
+### Constructor Behavior
+
+When you instantiate a controller, the constructor automatically:
+
+1. Loads the environment configuration from `app/config/config.php`
+2. Creates a new `Database` instance
+
+```php Sphp/Core/Controller.php
+public function __construct()
+{
+    $this->env = require('../app/config/config.php');
+    $this->db = new Database($this->env);
+}
+```
+
+## Accessing the Database
+
+You can access the database directly through the `$this->db` property:
+
+```php
+class UserController extends Controller
+{
+    public function getUsers()
+    {
+        $query = "SELECT * FROM users WHERE active = ?";
+        $users = $this->db->query($query, [1]);
+        
+        return $users;
+    }
+}
+```
+
+## Controller Methods
+
+Controller methods represent different actions or endpoints in your application:
+
+```php app/Controllers/HomeController.php
+class HomeController extends Controller
+{
+    public function index()
+    {
+        View::render('welcome.php');
+    }
+    
+    public function register()
+    {
+        try {
+            $request = Request::request();
+            $this->user->save($request);
+        } catch (Exception $e) {
+            // Handle error
+        }
+    }
+    
+    public function login()
+    {
+        try {
+            $request = Request::request();
+            $bearer_token = Auth::login($request);
+            
+            return $this->successResponse("Login success", $bearer_token);
+        } catch (Exception $e) {
+            return $this->errorResponse("Error try again");
+        }
+    }
+}
+```
+
+## Using Models in Controllers
+
+Controllers commonly work with models to interact with the database:
+
+```php
+class HomeController extends Controller
+{
+    protected $user;
+    
+    public function __construct()
+    {
+        parent::__construct();
+        $this->user = new Users();
+    }
+    
+    public function index()
+    {
+        $users = $this->user->select(['*']);
+        View::render('users/index.php', ['users' => $users]);
+    }
+}
+```
+
+## Rendering Views
+
+Use the `View::render()` method to display views from your controller:
+
+```php
+public function index()
+{
+    View::render('welcome.php');
+}
+
+// With data
+public function show($id)
+{
+    $user = $this->user->findByID($id);
+    View::render('users/show.php', ['user' => $user]);
+}
+```
+
+## Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Keep Controllers Thin" icon="weight-scale">
+    Move business logic to models and services. Controllers should only handle HTTP concerns.
+  </Card>
+  
+  <Card title="Use Dependency Injection" icon="syringe">
+    Initialize models and services in the constructor for cleaner code.
+  </Card>
+  
+  <Card title="Handle Exceptions" icon="shield-halved">
+    Always wrap potentially failing operations in try-catch blocks.
+  </Card>
+  
+  <Card title="Return Consistent Responses" icon="code-compare">
+    Use consistent response formats for APIs (successResponse, errorResponse).
+  </Card>
+</CardGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Models" icon="database" href="/guides/models">
+    Learn how to work with models and database operations
+  </Card>
+  
+  <Card title="Views" icon="eye" href="/guides/views">
+    Discover how to render views and use templates
+  </Card>
+</CardGroup>

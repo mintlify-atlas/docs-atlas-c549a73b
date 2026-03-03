@@ -1,0 +1,296 @@
+---
+title: 'Database Migrations'
+description: 'Create and run database migrations'
+---
+
+# Database Migrations
+
+S-PHP includes a simple yet powerful migration system for managing database schema changes. Migrations are timestamped SQL files that run in order and track execution status.
+
+## Creating Migrations
+
+Generate a new migration file:
+
+```bash
+php do migration [Name]
+```
+
+### Example
+
+```bash
+php do migration create_users_table
+```
+
+**Generated file**: `app/database/20260303141530_create_users_table.sql`
+
+```sql
+--Your sql code
+```
+
+### Migration Naming
+
+Migration files follow a timestamped naming convention (Command.php:36):
+
+```
+{YmdHis}_{name}.sql
+```
+
+Where:
+- **YmdHis**: Year, Month, Day, Hour, Minute, Second (e.g., `20260303141530`)
+- **name**: Your descriptive migration name (e.g., `create_users_table`)
+
+### Timestamp Format
+
+The 14-digit timestamp ensures migrations run in chronological order (init.php:40):
+
+- **2026** - Year
+- **03** - Month
+- **03** - Day
+- **14** - Hour
+- **15** - Minute
+- **30** - Second
+
+## Writing Migrations
+
+After generating a migration file, add your SQL code:
+
+### Example: Create Table
+
+```sql
+-- Create users table
+CREATE TABLE IF NOT EXISTS `users` (
+    `id` INT AUTO_INCREMENT PRIMARY KEY,
+    `username` VARCHAR(255) NOT NULL UNIQUE,
+    `email` VARCHAR(255) NOT NULL UNIQUE,
+    `password` VARCHAR(255) NOT NULL,
+    `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+);
+
+-- Create index on email
+CREATE INDEX `idx_users_email` ON `users` (`email`);
+```
+
+### Example: Alter Table
+
+```sql
+-- Add profile fields to users table
+ALTER TABLE `users` 
+    ADD COLUMN `first_name` VARCHAR(100),
+    ADD COLUMN `last_name` VARCHAR(100),
+    ADD COLUMN `bio` TEXT;
+```
+
+### Example: Seed Data
+
+```sql
+-- Insert default roles
+INSERT INTO `roles` (`name`, `description`) VALUES
+    ('admin', 'Administrator with full access'),
+    ('user', 'Regular user with limited access'),
+    ('guest', 'Guest user with read-only access');
+```
+
+## Running Migrations
+
+Execute all pending migrations:
+
+```bash
+php do migrate
+```
+
+### Migration Process
+
+The migration system (init.php:8-91) performs these steps:
+
+1. **Database Connection** (init.php:19-23)
+   - Connects to MySQL using configuration from `.env` file
+   - Creates database if it doesn't exist
+
+2. **Migrations Table** (init.php:27-33)
+   - Creates `migrations` table to track executed migrations
+   - Schema:
+     ```sql
+     CREATE TABLE IF NOT EXISTS `migrations` (
+         `id` INT AUTO_INCREMENT PRIMARY KEY,
+         `migration` VARCHAR(255) NOT NULL,
+         `executed_at` DATETIME DEFAULT CURRENT_TIMESTAMP
+     )
+     ```
+
+3. **File Discovery** (init.php:35-41)
+   - Scans `app/database/` for `.sql` files
+   - Only includes files starting with 14-digit timestamp
+   - Sorts files chronologically
+
+4. **Execution** (init.php:53-80)
+   - Checks which migrations have already run
+   - Skips previously executed migrations
+   - Runs new migrations in order
+   - Records execution in `migrations` table
+
+### Output Example
+
+```bash
+$ php do migrate
+Executing 20260303141530_create_users_table.sql...
+Successfully executed and recorded 20260303141530_create_users_table.sql
+Executing 20260303142015_add_user_profiles.sql...
+Successfully executed and recorded 20260303142015_add_user_profiles.sql
+Database migration complete.
+```
+
+### Skip Already Executed
+
+```bash
+$ php do migrate
+Skipping already executed migration: 20260303141530_create_users_table.sql
+Skipping already executed migration: 20260303142015_add_user_profiles.sql
+No valid .sql migration files found in app/database
+Database migration complete.
+```
+
+## Migration Status
+
+The `migrations` table tracks all executed migrations:
+
+```sql
+SELECT * FROM migrations;
+```
+
+| id | migration                                | executed_at         |
+|----|------------------------------------------|---------------------|
+| 1  | 20260303141530_create_users_table.sql   | 2026-03-03 14:15:45 |
+| 2  | 20260303142015_add_user_profiles.sql    | 2026-03-03 14:20:30 |
+
+## Database Configuration
+
+Migrations use database settings from your `.env` file (init.php:12-16):
+
+```env
+DB_HOST=localhost
+DB_PORT=3306
+DB_DATABASE=sphp_db
+DB_USERNAME=root
+DB_PASSWORD=secret
+```
+
+## Best Practices
+
+### Naming Conventions
+
+- Use descriptive names that explain what the migration does
+- Use snake_case for migration names
+- Examples:
+  - `create_users_table`
+  - `add_email_to_users`
+  - `create_posts_and_comments_tables`
+
+### Migration Content
+
+- **Use IF EXISTS/IF NOT EXISTS** to make migrations idempotent when possible
+- **One logical change per migration** - don't combine unrelated changes
+- **Include comments** to explain complex operations
+- **Test migrations** on a development database before production
+
+### SQL Guidelines
+
+```sql
+-- Good: Safe and reversible
+CREATE TABLE IF NOT EXISTS `users` (...);
+
+-- Good: Clear and documented
+-- Add user authentication fields
+ALTER TABLE `users` ADD COLUMN `two_factor_enabled` BOOLEAN DEFAULT FALSE;
+
+-- Avoid: Destructive operations without safeguards
+DROP TABLE `users`; -- No IF EXISTS check
+```
+
+### Empty Migrations
+
+The system automatically skips empty migration files (init.php:67-70):
+
+```bash
+Skipping empty file: 20260303141530_placeholder.sql
+```
+
+## Error Handling
+
+### Connection Errors
+
+```bash
+$ php do migrate
+Error: SQLSTATE[HY000] [1045] Access denied for user 'root'@'localhost'
+```
+
+**Solution**: Check your `.env` database credentials
+
+### Syntax Errors
+
+```bash
+$ php do migrate
+Executing 20260303141530_create_users_table.sql...
+Error: SQLSTATE[42000]: Syntax error or access violation
+```
+
+**Solution**: Review and fix SQL syntax in the migration file
+
+### File Read Errors
+
+```bash
+Failed to read 20260303141530_create_users_table.sql
+```
+
+**Solution**: Check file permissions and path
+
+## Migration Workflow
+
+Typical development workflow:
+
+1. **Create migration**:
+   ```bash
+   php do migration create_products_table
+   ```
+
+2. **Edit migration file**:
+   ```bash
+   # Edit app/database/20260303141530_create_products_table.sql
+   ```
+
+3. **Run migrations**:
+   ```bash
+   php do migrate
+   ```
+
+4. **Verify changes**:
+   ```bash
+   # Check database structure
+   mysql -u root -p -e "DESCRIBE products"
+   ```
+
+## Limitations
+
+- **No rollback**: The system doesn't support automatic migration rollback
+- **No dry-run**: Migrations execute immediately without preview
+- **SQL only**: Only `.sql` files are supported (no PHP-based migrations)
+
+### Manual Rollback
+
+To reverse a migration manually:
+
+1. Create a new migration with reverse operations
+2. Remove the entry from `migrations` table if needed
+3. Run the new migration
+
+Example:
+
+```bash
+# Original migration
+php do migration add_bio_to_users
+# Contains: ALTER TABLE users ADD COLUMN bio TEXT;
+
+# Rollback migration
+php do migration remove_bio_from_users
+# Contains: ALTER TABLE users DROP COLUMN bio;
+```

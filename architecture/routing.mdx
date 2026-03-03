@@ -1,0 +1,397 @@
+---
+title: Routing
+description: Define routes and handle HTTP requests in S-PHP
+---
+
+## Overview
+
+The S-PHP Router handles incoming HTTP requests and dispatches them to the appropriate controller methods. It supports both static and dynamic routes, GET and POST methods, and middleware integration.
+
+## Basic Usage
+
+### Defining Routes
+
+Routes are defined in `app/router/web.php`:
+
+```php app/router/web.php
+use App\Controllers\HomeController;
+use Sphp\Core\Router;
+
+$router = new Router();
+
+// GET routes
+$router->get('/', HomeController::class, 'index');
+$router->get('/about', HomeController::class, 'about');
+
+// POST routes
+$router->post('/register', HomeController::class, 'register');
+$router->post('/login', HomeController::class, 'login');
+
+// Dispatch the router
+$router->dispatch();
+```
+
+## Router Class
+
+The Router class manages route registration and dispatching:
+
+```php Sphp/Core/Router.php
+namespace Sphp\Core;
+
+class Router
+{
+    private $getRoutes = [];   // Stores GET routes
+    private $postRoutes = [];  // Stores POST routes
+    
+    public function get($route, $controller, $method, $middleware = null)
+    {
+        $this->getRoutes[$route] = [
+            'controller' => $controller,
+            'method' => $method,
+            'middelware' => $middleware
+        ];
+    }
+    
+    public function post($route, $controller, $method, $middleware = null)
+    {
+        $this->postRoutes[$route] = [
+            'controller' => $controller,
+            'method' => $method,
+            'middelware' => $middleware
+        ];
+    }
+}
+```
+
+## HTTP Methods
+
+### GET Routes
+
+Use GET routes for retrieving data:
+
+```php
+$router->get('/users', UserController::class, 'index');
+$router->get('/users/profile', UserController::class, 'profile');
+```
+
+### POST Routes
+
+Use POST routes for creating or updating data:
+
+```php
+$router->post('/users/create', UserController::class, 'store');
+$router->post('/users/update', UserController::class, 'update');
+```
+
+<Note>
+POST requests in S-PHP automatically sanitize HTML input (except for fields named 'content') to prevent XSS attacks.
+</Note>
+
+## Dynamic Routes
+
+Dynamic routes allow you to capture URL parameters using curly braces `{parameter}`.
+
+### Defining Dynamic Routes
+
+```php
+// Single parameter
+$router->get('/users/{id}', UserController::class, 'show');
+
+// Multiple parameters
+$router->get('/posts/{id}/comments/{commentId}', PostController::class, 'showComment');
+```
+
+### How Dynamic Routing Works
+
+The router uses pattern matching to extract parameters:
+
+```php Sphp/Core/Router.php
+private function matchDynamicRoute($definedRoute, $currentRoute, &$params)
+{
+    // Convert {id} to regex pattern ([^/]+)
+    $definedRoutePattern = preg_replace('/\{[a-zA-Z0-9_]+\}/', '([^/]+)', $definedRoute);
+    $definedRoutePattern = str_replace('/', '\\/', $definedRoutePattern);
+
+    // Match the pattern and extract parameters
+    if (preg_match('/^' . $definedRoutePattern . '$/', $currentRoute, $matches)) {
+        array_shift($matches); // Remove full match
+        $params = $matches;    // Remaining matches are parameters
+        return true;
+    }
+
+    return false;
+}
+```
+
+### Receiving Parameters in Controllers
+
+Parameters are passed to controller methods in order:
+
+```php
+namespace App\Controllers;
+
+use Sphp\Core\Controller;
+use Sphp\Core\View;
+
+class UserController extends Controller
+{
+    // For route: /users/{id}
+    public function show($id)
+    {
+        $user = $this->db->query(
+            "SELECT * FROM users WHERE id = ?", 
+            [$id]
+        );
+        
+        View::render('user.php', ['user' => $user[0]]);
+    }
+    
+    // For route: /posts/{postId}/comments/{commentId}
+    public function showComment($postId, $commentId)
+    {
+        // Parameters are passed in the order they appear in the URL
+        $comment = $this->db->query(
+            "SELECT * FROM comments WHERE id = ? AND post_id = ?",
+            [$commentId, $postId]
+        );
+        
+        View::render('comment.php', ['comment' => $comment[0]]);
+    }
+}
+```
+
+<Warning>
+Parameter names in the URL (like `{id}` or `{userId}`) are for readability only. Parameters are passed to controller methods by position, not by name.
+</Warning>
+
+## Route Examples
+
+<CodeGroup>
+
+```php Static Routes
+// Simple pages
+$router->get('/', HomeController::class, 'index');
+$router->get('/about', PageController::class, 'about');
+$router->get('/contact', PageController::class, 'contact');
+```
+
+```php Dynamic Routes
+// Resource routes
+$router->get('/users/{id}', UserController::class, 'show');
+$router->get('/posts/{id}/edit', PostController::class, 'edit');
+$router->get('/categories/{slug}', CategoryController::class, 'show');
+```
+
+```php Form Handling
+// Authentication
+$router->post('/login', AuthController::class, 'login');
+$router->post('/register', AuthController::class, 'register');
+$router->post('/logout', AuthController::class, 'logout');
+
+// CRUD operations
+$router->post('/posts/create', PostController::class, 'store');
+$router->post('/posts/{id}/update', PostController::class, 'update');
+$router->post('/posts/{id}/delete', PostController::class, 'destroy');
+```
+
+</CodeGroup>
+
+## Route Dispatching
+
+### The Dispatch Process
+
+When you call `$router->dispatch()`, the router:
+
+1. Gets the HTTP method (GET, POST, etc.)
+2. Gets the requested URI
+3. Removes query strings from the URI
+4. Matches the route against defined routes
+5. Executes middleware if present
+6. Calls the controller method with parameters
+
+```php Sphp/Core/Router.php
+public function dispatch()
+{
+    $method = $_SERVER['REQUEST_METHOD'];  // GET, POST, etc.
+    $route = $_SERVER['REQUEST_URI'];     // Requested endpoint
+
+    // Remove query strings
+    $route = strtok($route, '?');
+
+    $matchedRoute = null;
+    $params = [];
+
+    // Match routes based on HTTP method
+    if ($method == 'GET') {
+        foreach ($this->getRoutes as $definedRoute => $config) {
+            $matchedRoute = $this->matchDynamicRoute($definedRoute, $route, $params);
+            if ($matchedRoute) {
+                // Track current and previous URLs
+                $currentUrl = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? "https" : "http");
+                $currentUrl .= "://{$_SERVER['HTTP_HOST']}{$_SERVER['REQUEST_URI']}";
+                
+                $_SESSION['previous_url'] = $_SESSION['current_url'] ?? '/'; 
+                $_SESSION['current_url'] = $currentUrl;
+                $prev_url = $_SESSION['previous_url'] == $_SESSION['current_url'] ? "/" : $_SESSION['previous_url'];
+                
+                $this->handle_request($config, $params, $prev_url);
+                return;
+            }
+        }
+    }
+    
+    // If no route matches
+    View::render('404.html');
+}
+```
+
+<Info>
+The router automatically tracks the current and previous URLs in the session, which is useful for redirecting users back after authentication or form submissions.
+</Info>
+
+## 404 Handling
+
+When no route matches the request, S-PHP automatically renders a 404 page:
+
+```php
+// If no route matches
+View::render('404.html');
+```
+
+Create your custom 404 page at `app/views/404.html`.
+
+## API vs Web Routes
+
+S-PHP supports separate routing files for web and API routes:
+
+```php public/index.php
+$requestUri = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
+
+if (strpos($requestUri, '/api') === 0) {
+    require_once __DIR__ . '/../app/router/api.php';
+} else {
+    require_once __DIR__ . '/../app/router/web.php';
+}
+```
+
+### Web Routes
+
+Define web routes in `app/router/web.php`:
+
+```php
+$router->get('/', HomeController::class, 'index');
+$router->get('/dashboard', DashboardController::class, 'index');
+```
+
+### API Routes
+
+Define API routes in `app/router/api.php` (automatically prefixed with `/api`):
+
+```php
+// Accessible at /api/users
+$router->get('/users', ApiUserController::class, 'index');
+
+// Accessible at /api/users/{id}
+$router->get('/users/{id}', ApiUserController::class, 'show');
+```
+
+## Controller Method Invocation
+
+The router dynamically instantiates controllers and calls methods:
+
+```php Sphp/Core/Router.php
+private function callController($route, $params = [])
+{
+    $controllerName = $route['controller'];
+    $methodName = $route['method'];
+
+    if (class_exists($controllerName)) {
+        $controller = new $controllerName();
+        if (method_exists($controller, $methodName)) {
+            // Pass parameters to the controller method
+            call_user_func_array([$controller, $methodName], $params);
+        } else {
+            echo "Method $methodName not found in $controllerName.";
+        }
+    } else {
+        echo "Controller $controllerName not found.";
+    }
+}
+```
+
+## Best Practices
+
+<AccordionGroup>
+
+<Accordion title="Use RESTful Conventions">
+Follow REST conventions for resource routes:
+
+```php
+// List all
+$router->get('/posts', PostController::class, 'index');
+
+// Show one
+$router->get('/posts/{id}', PostController::class, 'show');
+
+// Create
+$router->post('/posts', PostController::class, 'store');
+
+// Update
+$router->post('/posts/{id}', PostController::class, 'update');
+
+// Delete
+$router->post('/posts/{id}/delete', PostController::class, 'destroy');
+```
+</Accordion>
+
+<Accordion title="Group Related Routes">
+Organize routes by feature or resource:
+
+```php
+// ======================
+// Public Routes
+// ======================
+$router->get('/', HomeController::class, 'index');
+$router->post('/login', AuthController::class, 'login');
+
+// ======================
+// User Routes
+// ======================
+$router->get('/users', UserController::class, 'index');
+$router->get('/users/{id}', UserController::class, 'show');
+```
+</Accordion>
+
+<Accordion title="Validate Parameters">
+Always validate dynamic parameters in your controllers:
+
+```php
+public function show($id)
+{
+    // Validate ID
+    if (!is_numeric($id) || $id <= 0) {
+        View::render('404.html');
+        return;
+    }
+    
+    // Proceed with query
+    $user = $this->db->query("SELECT * FROM users WHERE id = ?", [$id]);
+}
+```
+</Accordion>
+
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+
+<Card title="Middleware" icon="shield" href="/architecture/middleware">
+Protect routes with middleware
+</Card>
+
+<Card title="Request Lifecycle" icon="rotate" href="/architecture/request-lifecycle">
+Understand the complete request flow
+</Card>
+
+</CardGroup>

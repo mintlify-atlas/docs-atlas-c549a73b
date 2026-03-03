@@ -1,0 +1,290 @@
+---
+title: 'Models'
+description: 'API reference for the Models base class'
+---
+
+# Models
+
+The Models class provides an active record pattern for database operations, including CRUD functionality with protection against mass assignment vulnerabilities.
+
+## Namespace
+
+```php
+Sphp\Core\Models
+```
+
+## Protected Properties
+
+```php
+protected $table;          // Database table name
+protected $env;            // Configuration array
+protected $db;             // Database instance
+protected $fillables = []; // Allowed fields for mass assignment
+protected $hidden_fields;  // Fields to hide from output
+```
+
+---
+
+## Methods
+
+### create()
+
+Inserts a new record into the database table.
+
+```php
+public function create($request)
+```
+
+<ParamField path="request" type="array" required>
+  Associative array of field names and values to insert. Only fields listed in `$fillables` will be inserted.
+</ParamField>
+
+<ResponseField name="result" type="array">
+  Returns the result from the database query execution
+</ResponseField>
+
+#### Behavior
+
+- Filters the request data to only include fields defined in `$fillables` (protection against mass assignment)
+- Throws an exception if no valid fields are provided
+- Builds a parameterized INSERT query
+- Executes the query using prepared statements
+
+#### Example
+
+```php
+class User extends Models
+{
+    protected $table = 'users';
+    protected $fillables = ['name', 'email', 'password'];
+}
+
+$user = new User();
+$user->create([
+    'name' => 'John Doe',
+    'email' => 'john@example.com',
+    'password' => password_hash('secret', PASSWORD_DEFAULT)
+]);
+```
+
+---
+
+### update()
+
+Updates an existing record in the database table.
+
+```php
+public function update($request, $id)
+```
+
+<ParamField path="request" type="array" required>
+  Associative array of field names and values to update. Only fields listed in `$fillables` will be updated.
+</ParamField>
+
+<ParamField path="id" type="int|string" required>
+  The ID of the record to update
+</ParamField>
+
+<ResponseField name="void" type="void">
+  This method does not return a value
+</ResponseField>
+
+#### Behavior
+
+- Filters the request data to only include fields defined in `$fillables`
+- Throws an exception if no valid fields are provided
+- Builds a parameterized UPDATE query with WHERE id clause
+- Executes the query using prepared statements
+
+#### Example
+
+```php
+$user = new User();
+$user->update([
+    'name' => 'Jane Doe',
+    'email' => 'jane@example.com'
+], 42);
+```
+
+---
+
+### delete()
+
+Deletes a record from the database table by ID.
+
+```php
+public function delete($id)
+```
+
+<ParamField path="id" type="int|string" required>
+  The ID of the record to delete
+</ParamField>
+
+<ResponseField name="void" type="void">
+  This method does not return a value
+</ResponseField>
+
+#### Behavior
+
+- Throws an exception if no ID is provided
+- Executes a DELETE query with WHERE id clause
+- Uses prepared statements for security
+
+#### Example
+
+```php
+$user = new User();
+$user->delete(42);
+```
+
+---
+
+### select()
+
+Performs a SELECT query with flexible filtering, ordering, and limiting options.
+
+```php
+public function select(array $columns, array $where = [], string $orderBy = '', int $limit = 0)
+```
+
+<ParamField path="columns" type="array" required>
+  Array of column names to select (e.g., `['id', 'name', 'email']`)
+</ParamField>
+
+<ParamField path="where" type="array" default="[]">
+  Associative array of column-value pairs for WHERE conditions. Multiple conditions are combined with AND.
+</ParamField>
+
+<ParamField path="orderBy" type="string" default="''">
+  ORDER BY clause (e.g., `'created_at DESC'`, `'name ASC'`)
+</ParamField>
+
+<ParamField path="limit" type="int" default="0">
+  Maximum number of records to return. Use `0` for no limit.
+</ParamField>
+
+<ResponseField name="results" type="array">
+  Returns an array of associative arrays containing the query results
+</ResponseField>
+
+#### Behavior
+
+- Throws an exception if columns array is empty
+- Builds a SELECT query with optional WHERE, ORDER BY, and LIMIT clauses
+- All WHERE conditions are combined with AND logic
+- Uses prepared statements to prevent SQL injection
+
+#### Example
+
+```php
+$user = new User();
+
+// Select all columns for active users, ordered by name
+$activeUsers = $user->select(
+    ['id', 'name', 'email'],
+    ['status' => 'active'],
+    'name ASC',
+    10
+);
+
+// Select specific users
+$specificUser = $user->select(
+    ['*'],
+    ['email' => 'john@example.com', 'status' => 'active']
+);
+```
+
+---
+
+### findByID()
+
+Finds and returns a single record by its ID.
+
+```php
+public function findByID($id)
+```
+
+<ParamField path="id" type="int|string" required>
+  The ID of the record to retrieve
+</ParamField>
+
+<ResponseField name="record" type="array">
+  Returns an associative array containing the record data (first result only)
+</ResponseField>
+
+#### Behavior
+
+- Throws an exception if no ID is provided
+- Executes a SELECT query with WHERE id clause
+- Returns only the first matching record
+- **Note**: Does not use prepared statements (consider using `select()` for safer queries)
+
+#### Example
+
+```php
+$user = new User();
+$userData = $user->findByID(42);
+
+echo $userData['name'];  // John Doe
+echo $userData['email']; // john@example.com
+```
+
+---
+
+## Usage Pattern
+
+Extend the Models class and define the table and fillable fields:
+
+```php
+namespace App\Models;
+
+use Sphp\Core\Models;
+
+class Post extends Models
+{
+    protected $table = 'posts';
+    protected $fillables = ['title', 'content', 'author_id', 'status'];
+    protected $hidden_fields = ['deleted_at'];
+}
+
+// Create a new post
+$post = new Post();
+$post->create([
+    'title' => 'My First Post',
+    'content' => 'This is the content...',
+    'author_id' => 1,
+    'status' => 'published'
+]);
+
+// Find all published posts
+$publishedPosts = $post->select(
+    ['id', 'title', 'created_at'],
+    ['status' => 'published'],
+    'created_at DESC',
+    20
+);
+
+// Update a post
+$post->update([
+    'title' => 'Updated Title',
+    'content' => 'Updated content...'
+], 5);
+
+// Delete a post
+$post->delete(5);
+```
+
+## Mass Assignment Protection
+
+The `$fillables` array protects against mass assignment vulnerabilities by only allowing specified fields to be inserted or updated:
+
+```php
+protected $fillables = ['name', 'email', 'bio'];
+
+// This will only insert name and email (ignoring is_admin)
+$user->create([
+    'name' => 'John',
+    'email' => 'john@example.com',
+    'is_admin' => true  // This field will be ignored!
+]);
+```

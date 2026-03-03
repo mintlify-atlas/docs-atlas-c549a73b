@@ -1,0 +1,276 @@
+---
+title: 'File Generators'
+description: 'Scaffold controllers, models, middleware, and views'
+---
+
+# File Generators
+
+S-PHP includes powerful code generators to quickly scaffold common application components. All generators automatically create the necessary directory structure and generate properly namespaced PHP classes.
+
+## Controller Generator
+
+Create a new controller class:
+
+```bash
+php do controller [Name]
+```
+
+### Basic Usage
+
+```bash
+php do controller UserController
+```
+
+**Generated file**: `app/controllers/UserController.php`
+
+```php
+<?php
+
+namespace Sphp\Controllers;
+
+use Sphp\Controllers\Controller;
+
+/**
+ * UserController Controller
+ */
+class UserController extends Controller
+{
+    // TODO: Implement Controller functionality
+}
+```
+
+### Nested Controllers
+
+Create controllers in subdirectories with automatic namespace resolution:
+
+```bash
+php do controller Admin/UserController
+```
+
+**Generated file**: `app/controllers/Admin/UserController.php`
+
+```php
+<?php
+
+namespace Sphp\Controllers\Admin;
+
+use Sphp\Controllers\Controller;
+
+/**
+ * UserController Controller
+ */
+class UserController extends Controller
+{
+    // TODO: Implement Controller functionality
+}
+```
+
+### Configuration
+
+- **Path**: `app/controllers/{name}.php` (Command.php:42)
+- **Namespace**: `Sphp\Controllers` (Command.php:44)
+- **Base Class**: `Sphp\Controllers\Controller` (Command.php:45)
+
+## Middleware Generator
+
+Create a new middleware class:
+
+```bash
+php do middleware [Name]
+```
+
+### Basic Usage
+
+```bash
+php do middleware AuthMiddleware
+```
+
+**Generated file**: `app/middleware/AuthMiddleware.php`
+
+```php
+<?php
+
+namespace Sphp\Middleware;
+
+use Sphp\Middleware\Middleware;
+
+/**
+ * AuthMiddleware Middleware
+ */
+class AuthMiddleware extends Middleware
+{
+    // TODO: Implement Middleware functionality
+}
+```
+
+### Nested Middleware
+
+```bash
+php do middleware Api/RateLimitMiddleware
+```
+
+**Generated file**: `app/middleware/Api/RateLimitMiddleware.php`
+
+```php
+<?php
+
+namespace Sphp\Middleware\Api;
+
+use Sphp\Middleware\Middleware;
+
+/**
+ * RateLimitMiddleware Middleware
+ */
+class RateLimitMiddleware extends Middleware
+{
+    // TODO: Implement Middleware functionality
+}
+```
+
+### Configuration
+
+- **Path**: `app/middleware/{name}.php` (Command.php:48)
+- **Namespace**: `Sphp\Middleware` (Command.php:50)
+- **Base Class**: `Sphp\Middleware\Middleware` (Command.php:51)
+
+## Model Generator
+
+Create a new model class:
+
+```bash
+php do model [Name]
+```
+
+### Basic Usage
+
+```bash
+php do model User
+```
+
+**Generated file**: `app/models/User.php`
+
+```php
+<?php
+
+namespace Sphp\Models;
+
+use Sphp\Core\Models;
+
+/**
+ * User Model
+ */
+class User extends Models
+{
+    // TODO: Implement Model functionality
+}
+```
+
+### Nested Models
+
+```bash
+php do model Blog/Post
+```
+
+**Generated file**: `app/models/Blog/Post.php`
+
+```php
+<?php
+
+namespace Sphp\Models\Blog;
+
+use Sphp\Core\Models;
+
+/**
+ * Post Model
+ */
+class Post extends Models
+{
+    // TODO: Implement Model functionality
+}
+```
+
+### Configuration
+
+- **Path**: `app/models/{name}.php` (Command.php:54)
+- **Namespace**: `Sphp\Models` (Command.php:56)
+- **Base Class**: `Sphp\Core\Models` (Command.php:57)
+
+## View Generator
+
+Create a new view file:
+
+```bash
+php do views [path]
+```
+
+### Basic Usage
+
+```bash
+php do views home
+```
+
+**Generated file**: `app/views/home.php`
+
+```html
+<!-- View File: home -->
+```
+
+### Nested Views
+
+```bash
+php do views admin/users/index
+```
+
+**Generated file**: `app/views/admin/users/index.php`
+
+```html
+<!-- View File: index -->
+```
+
+### Configuration
+
+- **Path**: `app/views/{name}.php` (Command.php:30)
+- **Template**: HTML comment with view name (Command.php:31)
+- No namespace (views are plain PHP templates)
+
+## Generator Features
+
+### Automatic Directory Creation
+
+All generators automatically create parent directories if they don't exist (Command.php:132):
+
+```bash
+ℹ️ Created directory: app/controllers/Admin
+🚀 Created controller file: app/controllers/Admin/UserController.php
+```
+
+### Duplicate Detection
+
+Generators check if files already exist and prevent accidental overwrites (Command.php:141):
+
+```bash
+ℹ️ File already exists: app/controllers/UserController.php
+```
+
+### Namespace Resolution
+
+For class-based generators (controller, middleware, model), subdirectories are automatically converted to sub-namespaces (Command.php:184-186):
+
+- `Admin/UserController` → `Sphp\Controllers\Admin\UserController`
+- `Api/V1/Middleware` → `Sphp\Middleware\Api\V1\Middleware`
+
+### Error Handling
+
+Generators provide clear error messages:
+
+```bash
+# Missing name
+$ php do controller
+❌ Missing name parameter! Use: php do controller [name]
+
+# Directory creation failure
+❌ Failed to create directory: app/controllers/Admin
+
+# Write failure
+❌ Failed to write file: app/controllers/UserController.php
+```

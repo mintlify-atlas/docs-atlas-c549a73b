@@ -1,0 +1,213 @@
+---
+title: Installation
+description: Get S-PHP installed and running on your system in minutes
+---
+
+Installing S-PHP is straightforward. Follow these steps to get up and running quickly.
+
+## System requirements
+
+Before installing S-PHP, ensure your system meets these requirements:
+
+<CardGroup cols={2}>
+  <Card title="PHP version" icon="php">
+    PHP 8.1 or higher is required
+  </Card>
+  
+  <Card title="Extensions" icon="puzzle-piece">
+    `ext-mbstring` and `ext-pdo` must be enabled
+  </Card>
+  
+  <Card title="Web server" icon="server">
+    Apache, Nginx, or use PHP's built-in server
+  </Card>
+  
+  <Card title="Composer" icon="box">
+    Required for autoloading and dependency management
+  </Card>
+</CardGroup>
+
+### Verify PHP installation
+
+Check your PHP version and installed extensions:
+
+```bash
+php -v
+php -m | grep -E "mbstring|pdo"
+```
+
+<Note>
+  If you don't have PHP 8.1 or higher, visit [php.net](https://www.php.net/downloads) to download and install the latest version.
+</Note>
+
+## Installation steps
+
+<Steps>
+  <Step title="Clone the repository">
+    Clone the S-PHP repository to your local machine:
+    
+    ```bash
+    git clone https://github.com/PranabZz/S-PHP.git
+    cd S-PHP
+    ```
+    
+    This will create a new directory called `S-PHP` with all the framework files.
+  </Step>
+  
+  <Step title="Install dependencies">
+    Use Composer to install the required dependencies and set up autoloading:
+    
+    ```bash
+    composer install
+    ```
+    
+    This command will:
+    - Install all required packages
+    - Generate the `vendor/autoload.php` file
+    - Set up PSR-4 autoloading for your application
+    
+    <Tip>
+      Don't have Composer? Download it from [getcomposer.org](https://getcomposer.org/download/).
+    </Tip>
+  </Step>
+  
+  <Step title="Configure environment (optional)">
+    If your project includes a `.env.example` file, copy it to `.env` and configure your environment variables:
+    
+    ```bash
+    cp .env.example .env
+    ```
+    
+    Edit the `.env` file to configure your database connection and other settings.
+  </Step>
+  
+  <Step title="Run migrations (optional)">
+    If you're using a database, run the migrations to set up your database schema:
+    
+    ```bash
+    php do migrate
+    ```
+  </Step>
+  
+  <Step title="Start the development server">
+    Use the built-in CLI command to start PHP's development server:
+    
+    ```bash
+    php do up
+    ```
+    
+    This will start the server on `http://localhost:8000`.
+    
+    <Note>
+      The `php do up` command runs PHP's built-in server from the `public` directory, which is the recommended entry point for your application.
+    </Note>
+  </Step>
+  
+  <Step title="Verify installation">
+    Open your browser and navigate to `http://localhost:8000`. You should see the S-PHP welcome page.
+    
+    If everything is working correctly, you're ready to start building your application!
+  </Step>
+</Steps>
+
+## Project structure
+
+After installation, your project directory will look like this:
+
+```bash
+S-PHP/
+├── app/
+│   ├── Controllers/      # Application controllers
+│   ├── Models/           # Database models
+│   ├── Views/            # View templates
+│   ├── Middleware/       # Middleware classes
+│   ├── Services/         # Service classes
+│   ├── router/           # Route definitions
+│   │   ├── web.php       # Web routes
+│   │   └── api.php       # API routes
+│   ├── config/           # Configuration files
+│   └── Database/         # Database migrations
+├── public/
+│   └── index.php         # Application entry point
+├── Sphp/
+│   ├── Core/             # Framework core classes
+│   └── Services/         # Framework services
+├── vendor/               # Composer dependencies
+├── Command.php           # CLI command handler
+├── composer.json         # Composer configuration
+└── do                    # CLI entry point
+```
+
+<Tip>
+  The `public` directory is the document root. When deploying to production, configure your web server to point to this directory.
+</Tip>
+
+## Web server configuration
+
+### Apache
+
+If you're using Apache, ensure you have a `.htaccess` file in the `public` directory with the following configuration:
+
+```apache
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    RewriteCond %{REQUEST_FILENAME} !-f
+    RewriteCond %{REQUEST_FILENAME} !-d
+    RewriteRule ^ index.php [L]
+</IfModule>
+```
+
+### Nginx
+
+For Nginx, add this configuration to your server block:
+
+```nginx
+location / {
+    try_files $uri $uri/ /index.php?$query_string;
+}
+
+location ~ \.php$ {
+    fastcgi_pass unix:/var/run/php/php8.1-fpm.sock;
+    fastcgi_index index.php;
+    fastcgi_param SCRIPT_FILENAME $realpath_root$fastcgi_script_name;
+    include fastcgi_params;
+}
+```
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Port 8000 is already in use">
+    If port 8000 is already in use, you can specify a different port:
+    
+    ```bash
+    cd public && php -S localhost:8080
+    ```
+  </Accordion>
+  
+  <Accordion title="Autoloader error: Unable to load class">
+    This error usually means Composer's autoloader isn't set up correctly. Run:
+    
+    ```bash
+    composer dump-autoload
+    ```
+  </Accordion>
+  
+  <Accordion title="PDO extension not found">
+    Install the PDO extension for your PHP version:
+    
+    ```bash
+    # Ubuntu/Debian
+    sudo apt-get install php8.1-pdo php8.1-mysql
+    
+    # macOS (Homebrew)
+    brew install php@8.1
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Next steps
+
+<Card title="Quick start guide" icon="rocket" href="/quickstart">
+  Learn how to build your first S-PHP application with our quick start guide.
+</Card>

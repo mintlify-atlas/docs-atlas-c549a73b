@@ -1,0 +1,391 @@
+---
+title: 'SMTPMailer Service'
+description: 'Singleton SMTP email service with TLS encryption'
+---
+
+## Overview
+
+The `SMTPMailer` service provides a lightweight SMTP email client with TLS encryption support. It's implemented as a singleton and handles direct SMTP communication for sending emails.
+
+<Note>
+This is a singleton service. Always use `SMTPMailer::getInstance()` to access it. Configuration is loaded from environment variables.
+</Note>
+
+## Configuration
+
+The SMTPMailer service requires the following environment variables:
+
+```bash
+MAIL_HOST=smtp.gmail.com
+MAIL_PORT=587
+MAIL_USERNAME=your-email@gmail.com
+MAIL_PASSWORD=your-app-password
+```
+
+<Warning>
+All four environment variables must be set, or an exception will be thrown when getting the instance.
+</Warning>
+
+---
+
+## Getting Instance
+
+### getInstance()
+
+Retrieves the singleton instance of SMTPMailer.
+
+```php
+SMTPMailer::getInstance(): SMTPMailer
+```
+
+#### Example
+
+```php
+use Sphp\Services\SMTPMailer;
+
+try {
+    $mailer = SMTPMailer::getInstance();
+} catch (Exception $e) {
+    echo "Configuration error: " . $e->getMessage();
+}
+```
+
+#### Behavior
+
+- Loads configuration from environment variables or fallback config file
+- Validates all required SMTP settings are present
+- Throws `Exception` if any configuration is missing
+- Returns singleton instance on success
+
+---
+
+## Methods
+
+### sendEmail()
+
+Sends an email via SMTP with HTML support.
+
+```php
+$mailer->sendEmail(string $fromEmail, string $toEmail, string $subject, string $body): bool
+```
+
+<ParamField body="fromEmail" type="string" required>
+  Sender's email address (must be valid email format)
+</ParamField>
+
+<ParamField body="toEmail" type="string" required>
+  Recipient's email address (must be valid email format)
+</ParamField>
+
+<ParamField body="subject" type="string" required>
+  Email subject line
+</ParamField>
+
+<ParamField body="body" type="string" required>
+  Email body content (supports HTML)
+</ParamField>
+
+<ResponseField type="bool">
+  Returns `true` on successful send
+</ResponseField>
+
+#### Example
+
+```php
+use Sphp\Services\SMTPMailer;
+
+$mailer = SMTPMailer::getInstance();
+
+try {
+    $success = $mailer->sendEmail(
+        'noreply@example.com',
+        'user@example.com',
+        'Welcome to Our Service',
+        '<h1>Welcome!</h1><p>Thank you for signing up.</p>'
+    );
+    
+    if ($success) {
+        echo "Email sent successfully";
+    }
+} catch (Exception $e) {
+    echo "Failed to send email: " . $e->getMessage();
+}
+```
+
+#### Email Flow
+
+1. Validates email address formats
+2. Establishes SMTP connection to configured host:port
+3. Upgrades connection to TLS encryption
+4. Authenticates with SMTP credentials
+5. Sends email with HTML content type
+6. Disconnects after sending
+7. Returns `true` on success
+8. Throws `Exception` on any failure
+
+#### Content Type
+
+Emails are sent with:
+- Content-Type: `text/html; charset=UTF-8`
+- Date header with RFC 2822 format
+- From, To, and Subject headers
+
+---
+
+## Connection Management
+
+The service handles SMTP connections automatically:
+
+### TLS Encryption
+
+1. Initial connection via TCP socket
+2. SMTP handshake with `HELO`
+3. `STARTTLS` command to upgrade connection
+4. TLS encryption enabled via `stream_socket_enable_crypto()`
+5. Second `HELO` after TLS upgrade
+
+### Authentication
+
+Uses SMTP AUTH LOGIN method:
+
+1. Sends `AUTH LOGIN` command
+2. Sends base64-encoded username
+3. Sends base64-encoded password
+4. Validates 235 response code for success
+
+### Automatic Cleanup
+
+Connections are automatically closed:
+- After successful email send
+- On exception/error
+- On object destruction (`__destruct()`)
+
+---
+
+## Error Handling
+
+### Exception Scenarios
+
+The service throws `Exception` in these cases:
+
+<AccordionGroup>
+  <Accordion title="Configuration Errors">
+    ```php
+    throw new Exception("SMTP configuration is incomplete. Missing: smtpHost, smtpPort");
+    ```
+    
+    Thrown when `getInstance()` is called without required environment variables.
+  </Accordion>
+
+  <Accordion title="Connection Errors">
+    ```php
+    throw new Exception("SMTP connection failed: Connection refused (111)");
+    ```
+    
+    Thrown when unable to connect to SMTP server.
+  </Accordion>
+
+  <Accordion title="TLS Errors">
+    ```php
+    throw new Exception("Failed to start TLS encryption");
+    ```
+    
+    Thrown when TLS upgrade fails.
+  </Accordion>
+
+  <Accordion title="SMTP Protocol Errors">
+    ```php
+    throw new Exception("SMTP error - Expected 250, got: 550 Mailbox not found");
+    ```
+    
+    Thrown when SMTP server returns unexpected response codes.
+  </Accordion>
+
+  <Accordion title="Validation Errors">
+    ```php
+    throw new Exception("Invalid email address format");
+    ```
+    
+    Thrown when email addresses fail validation.
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## Email Validation
+
+All email addresses are validated using PHP's `FILTER_VALIDATE_EMAIL` filter:
+
+```php
+private function isValidEmail($email)
+{
+    return filter_var($email, FILTER_VALIDATE_EMAIL) !== false;
+}
+```
+
+---
+
+## Usage Examples
+
+### Simple Text Email
+
+```php
+$mailer = SMTPMailer::getInstance();
+
+$mailer->sendEmail(
+    'noreply@example.com',
+    'user@example.com',
+    'Hello',
+    '<p>This is a simple message.</p>'
+);
+```
+
+### HTML Email with Styling
+
+```php
+$mailer = SMTPMailer::getInstance();
+
+$htmlBody = '
+<!DOCTYPE html>
+<html>
+<head>
+    <style>
+        body { font-family: Arial, sans-serif; }
+        .header { background-color: #4CAF50; color: white; padding: 20px; }
+        .content { padding: 20px; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>Welcome to Our Service</h1>
+    </div>
+    <div class="content">
+        <p>Thank you for registering!</p>
+        <p>Click the button below to verify your email:</p>
+        <a href="https://example.com/verify" style="background-color: #4CAF50; color: white; padding: 10px 20px; text-decoration: none;">Verify Email</a>
+    </div>
+</body>
+</html>
+';
+
+$mailer->sendEmail(
+    'noreply@example.com',
+    'user@example.com',
+    'Verify Your Email',
+    $htmlBody
+);
+```
+
+### With Error Handling
+
+```php
+use Sphp\Services\SMTPMailer;
+
+try {
+    $mailer = SMTPMailer::getInstance();
+    
+    $sent = $mailer->sendEmail(
+        'noreply@example.com',
+        'user@example.com',
+        'Password Reset',
+        '<p>Click here to reset your password: <a href="...">Reset</a></p>'
+    );
+    
+    if ($sent) {
+        echo "Password reset email sent successfully";
+    }
+} catch (Exception $e) {
+    error_log("Email sending failed: " . $e->getMessage());
+    echo "Unable to send email at this time";
+}
+```
+
+---
+
+## Technical Details
+
+### Connection Timeout
+
+```php
+private $timeout = 30; // 30 seconds
+```
+
+Socket connections timeout after 30 seconds if server doesn't respond.
+
+### SMTP Commands Used
+
+1. `HELO` - Initial handshake
+2. `STARTTLS` - Upgrade to TLS
+3. `AUTH LOGIN` - Authentication
+4. `MAIL FROM` - Sender address
+5. `RCPT TO` - Recipient address
+6. `DATA` - Begin message content
+7. `QUIT` - Close connection
+
+### Response Codes Validated
+
+- `220` - Service ready / STARTTLS ready
+- `235` - Authentication successful
+- `250` - Command successful
+- `334` - Authentication continue
+- `354` - Start mail input
+- `221` - Service closing
+
+---
+
+## Security Considerations
+
+<CardGroup cols={2}>
+  <Card title="TLS Encryption" icon="lock">
+    All connections are upgraded to TLS before authentication and data transmission.
+  </Card>
+
+  <Card title="Secure Credentials" icon="key">
+    SMTP credentials should use app-specific passwords, not main account passwords.
+  </Card>
+
+  <Card title="Email Validation" icon="check">
+    All email addresses are validated before attempting to send.
+  </Card>
+
+  <Card title="Error Logging" icon="file-text">
+    Errors are logged via `error_log()` for debugging without exposing details to users.
+  </Card>
+</CardGroup>
+
+---
+
+## Common SMTP Providers
+
+### Gmail
+
+```bash
+MAIL_HOST=smtp.gmail.com
+MAIL_PORT=587
+MAIL_USERNAME=your-email@gmail.com
+MAIL_PASSWORD=app-specific-password
+```
+
+### SendGrid
+
+```bash
+MAIL_HOST=smtp.sendgrid.net
+MAIL_PORT=587
+MAIL_USERNAME=apikey
+MAIL_PASSWORD=your-sendgrid-api-key
+```
+
+### Mailgun
+
+```bash
+MAIL_HOST=smtp.mailgun.org
+MAIL_PORT=587
+MAIL_USERNAME=postmaster@your-domain.mailgun.org
+MAIL_PASSWORD=your-mailgun-smtp-password
+```
+
+---
+
+## Source Reference
+
+Location: `~/workspace/source/Sphp/Services/SMTPMailer.php`

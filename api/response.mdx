@@ -1,0 +1,107 @@
+---
+title: 'Response'
+description: 'Send HTTP responses in S-PHP'
+---
+
+## Overview
+
+The `Response` class provides methods to send JSON responses with appropriate HTTP status codes.
+
+## Methods
+
+### response()
+
+Sends a JSON response with a specified HTTP status code.
+
+```php
+public static function response($response_code, $message, $key = "message")
+```
+
+<ParamField path="response_code" type="int" required>
+  The HTTP response status code (e.g., 200, 404, 500)
+</ParamField>
+
+<ParamField path="message" type="string" required>
+  The message to include in the JSON response
+</ParamField>
+
+<ParamField path="key" type="string" default="message">
+  The key name for the message in the JSON response object
+</ParamField>
+
+#### Usage Examples
+
+##### Success Response
+
+```php
+use Sphp\Core\Response;
+
+// Send a success response
+Response::response(200, "User created successfully");
+
+// Output:
+// {"message": "User created successfully"}
+```
+
+##### Error Response
+
+```php
+use Sphp\Core\Response;
+
+// Send an error response
+Response::response(404, "User not found");
+
+// Output:
+// {"message": "User not found"}
+```
+
+##### Custom Key Response
+
+```php
+use Sphp\Core\Response;
+
+// Send a response with custom key
+Response::response(200, "Operation completed", "status");
+
+// Output:
+// {"status": "Operation completed"}
+```
+
+##### API Endpoint Example
+
+```php
+use Sphp\Core\Response;
+use Sphp\Core\Request;
+
+$data = Request::request();
+
+if (!$data) {
+    Response::response(400, "Bad request", "error");
+    exit;
+}
+
+// Process the request
+$success = processData($data);
+
+if ($success) {
+    Response::response(201, "Resource created", "success");
+} else {
+    Response::response(500, "Failed to create resource", "error");
+}
+```
+
+## Common HTTP Status Codes
+
+- `200` - OK (Success)
+- `201` - Created (Resource created successfully)
+- `400` - Bad Request (Invalid request data)
+- `401` - Unauthorized (Authentication required)
+- `403` - Forbidden (Access denied)
+- `404` - Not Found (Resource not found)
+- `500` - Internal Server Error (Server error)
+
+## Notes
+
+- This method automatically sets the `Content-Type` header to `application/json`
+- The method outputs the JSON response directly and does not return a value
+- After calling this method, you typically want to exit the script to prevent further output

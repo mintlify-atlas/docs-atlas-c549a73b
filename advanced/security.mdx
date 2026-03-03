@@ -1,0 +1,406 @@
+---
+title: 'Security'
+description: 'Security features and best practices in S-PHP'
+---
+
+## Overview
+
+S-PHP provides built-in security features to protect your application from common vulnerabilities including CSRF attacks, XSS attacks, and session hijacking.
+
+## CSRF Protection
+
+Cross-Site Request Forgery (CSRF) protection prevents unauthorized commands from being transmitted from a user that the web application trusts.
+
+### Generating CSRF Tokens
+
+Use the `csrf()` function to generate a hidden input field with a token:
+
+```php
+<form method="POST" action="/submit">
+    <?php csrf(); ?>
+    <input type="text" name="username">
+    <button type="submit">Submit</button>
+</form>
+```
+
+**Generated HTML:**
+```html
+<input type="hidden" name="csrf_token" value="a1b2c3d4e5f6...">
+```
+
+### How It Works
+
+The `csrf()` function:
+
+1. Checks if a token exists in the session
+2. Generates a new token using `random_bytes(32)` if needed
+3. Stores the token in `$_SESSION['csrf_token']`
+4. Outputs a hidden input field with the token
+
+```php
+function csrf()
+{
+    if (empty($_SESSION['csrf_token'])) {
+        $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+    }
+    echo '<input type="hidden" name="csrf_token" value="' . 
+         htmlspecialchars($_SESSION['csrf_token']) . '">';
+}
+```
+
+### Validating CSRF Tokens
+
+Validate the token on form submission:
+
+```php
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $token = $_POST['csrf_token'] ?? '';
+    
+    if (!validateCsrfToken($token)) {
+        die('CSRF token validation failed');
+    }
+    
+    // Process form data
+}
+```
+
+### validateCsrfToken()
+
+The validation function uses timing-safe comparison:
+
+```php
+function validateCsrfToken($token)
+{
+    return isset($_SESSION['csrf_token']) && 
+           hash_equals($_SESSION['csrf_token'], $token);
+}
+```
+
+**Why `hash_equals()`?**
+- Prevents timing attacks
+- Compares strings in constant time
+- More secure than `===` for sensitive comparisons
+
+### Complete Example
+
+```php
+// form.php
+<form method="POST" action="/process">
+    <?php csrf(); ?>
+    
+    <input type="email" name="email" required>
+    <button type="submit">Subscribe</button>
+</form>
+```
+
+```php
+// process.php
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    // Validate CSRF token
+    if (!validateCsrfToken($_POST['csrf_token'] ?? '')) {
+        http_response_code(403);
+        die('Invalid CSRF token');
+    }
+    
+    // Process the form
+    $email = $_POST['email'];
+    // ...
+}
+```
+
+## XSS Protection
+
+Cross-Site Scripting (XSS) protection prevents malicious scripts from being injected into your pages.
+
+### sanitizeHtml()
+
+The `sanitizeHtml()` function cleans user input while preserving safe HTML:
+
+```php
+$userInput = $_POST['content'];
+$clean = sanitizeHtml($userInput);
+```
+
+### Allowed HTML Tags
+
+By default, these tags are allowed:
+
+```php
+<p> <br> <b> <strong> <i> <em> <ul> <ol> <li> 
+<a> <img> <blockquote> <span> <div> 
+<h1> <h2> <h3> <h4> <h5> <h6>
+```
+
+### Security Features
+
+**1. Removes dangerous tags:**
+```php
+// Input:
+$input = '<script>alert("XSS")</script><p>Safe content</p>';
+
+// Output:
+$clean = sanitizeHtml($input);
+// Result: '<p>Safe content</p>'
+```
+
+**2. Removes event handlers:**
+```php
+// Input:
+$input = '<p onclick="alert(\"XSS\")">Click me</p>';
+
+// Output:
+$clean = sanitizeHtml($input);
+// Result: '<p>Click me</p>'
+```
+
+**3. Removes inline styles:**
+```php
+// Input:
+$input = '<p style="color:red">Styled text</p>';
+
+// Output:
+$clean = sanitizeHtml($input);
+// Result: '<p>Styled text</p>'
+```
+
+**4. Blocks dangerous URLs:**
+```php
+// Input:
+$input = '<a href="javascript:alert(\"XSS\")">Click</a>';
+
+// Output:
+$clean = sanitizeHtml($input);
+// Result: '<a href="#">Click</a>'
+```
+
+**5. Allows safe data URLs:**
+```php
+// Safe image data URLs are preserved:
+$input = '<img src="data:image/png;base64,iVBORw0KGgoAAAANS...">';
+$clean = sanitizeHtml($input);
+// Image tag is preserved
+```
+
+### Array Support
+
+Sanitize arrays recursively:
+
+```php
+$data = [
+    'title' => '<script>alert()</script>Hello',
+    'items' => [
+        '<p onclick="xss()">Item 1</p>',
+        '<p>Item 2</p>'
+    ]
+];
+
+$clean = sanitizeHtml($data);
+// Sanitizes all values recursively
+```
+
+### When to Use sanitizeHtml()
+
+**Use when:**
+- Accepting rich text from users (blog posts, comments)
+- Displaying HTML content from untrusted sources
+- Storing user-generated HTML in the database
+
+**Don't use when:**
+- Displaying plain text (use `htmlspecialchars()` instead)
+- Working with JSON or API data
+- The data doesn't contain HTML
+
+### Example: Blog Comment System
+
+```php
+// Saving comment
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    if (!validateCsrfToken($_POST['csrf_token'] ?? '')) {
+        die('Invalid token');
+    }
+    
+    $comment = sanitizeHtml($_POST['comment']);
+    $author = htmlspecialchars($_POST['author']);
+    
+    // Save to database
+    saveComment($author, $comment);
+}
+
+// Displaying comments
+foreach ($comments as $comment) {
+    echo '<div class="comment">';
+    echo '<strong>' . htmlspecialchars($comment['author']) . '</strong>';
+    echo '<div>' . $comment['content'] . '</div>'; // Already sanitized
+    echo '</div>';
+}
+```
+
+## Session Security
+
+### Automatic Session Start
+
+S-PHP automatically starts sessions:
+
+```php
+if (!isset($_SESSION))
+    session_start();
+```
+
+### Session Best Practices
+
+**1. Regenerate session ID on login:**
+```php
+function userLogin($username, $password)
+{
+    if (authenticateUser($username, $password)) {
+        session_regenerate_id(true);
+        $_SESSION['user_id'] = $userId;
+        $_SESSION['logged_in'] = true;
+    }
+}
+```
+
+**2. Clear session on logout:**
+```php
+function userLogout()
+{
+    $_SESSION = [];
+    session_destroy();
+    setcookie(session_name(), '', time() - 3600, '/');
+}
+```
+
+**3. Validate session data:**
+```php
+function checkAuth()
+{
+    if (!isset($_SESSION['user_id']) || !isset($_SESSION['logged_in'])) {
+        redirect('/login');
+        exit;
+    }
+}
+```
+
+**4. Store session messages:**
+```php
+function setMessage($message, $type = 'info')
+{
+    $_SESSION['message'] = $message;
+    $_SESSION['type'] = $type;
+}
+
+function getMessage()
+{
+    $message = $_SESSION['message'] ?? null;
+    $type = $_SESSION['type'] ?? 'info';
+    
+    unset($_SESSION['message'], $_SESSION['type']);
+    
+    return ['message' => $message, 'type' => $type];
+}
+```
+
+## Input Validation
+
+### Email Validation
+
+```php
+$email = $_POST['email'];
+
+if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+    die('Invalid email address');
+}
+```
+
+### URL Validation
+
+```php
+$url = $_POST['website'];
+
+if (!filter_var($url, FILTER_VALIDATE_URL)) {
+    die('Invalid URL');
+}
+```
+
+### Integer Validation
+
+```php
+$id = $_POST['id'];
+
+if (!filter_var($id, FILTER_VALIDATE_INT)) {
+    die('Invalid ID');
+}
+```
+
+## Error Handling
+
+### Error Reporting Configuration
+
+S-PHP configures error reporting on startup:
+
+```php
+error_reporting(E_ALL & ~E_WARNING);
+ini_set('display_errors', 1);
+```
+
+### Fatal Error Handler
+
+Automatically catches fatal errors:
+
+```php
+register_shutdown_function(function () {
+    $error = error_get_last();
+    if ($error && in_array($error['type'], [E_ERROR, E_CORE_ERROR, E_COMPILE_ERROR, E_PARSE])) {
+        error_log("Fatal Error: " . $error['message'] . " in " . $error['file'] . " on line " . $error['line']);
+        
+        $errorMessage = urlencode("Error: " . $error['message'] . " in " . $error['file'] . " on line " . $error['line']);
+        
+        header("Location: error.html?error=$errorMessage");
+        exit;
+    }
+});
+```
+
+## Security Checklist
+
+- [ ] Use `csrf()` in all forms
+- [ ] Validate CSRF tokens on form submission
+- [ ] Sanitize user input with `sanitizeHtml()`
+- [ ] Use `htmlspecialchars()` for plain text output
+- [ ] Validate email, URL, and integer inputs
+- [ ] Regenerate session ID on login
+- [ ] Clear sessions on logout
+- [ ] Use prepared statements for database queries
+- [ ] Never store passwords in plain text
+- [ ] Use HTTPS in production
+- [ ] Set secure and httpOnly flags on cookies
+- [ ] Implement rate limiting for sensitive operations
+
+## Additional Recommendations
+
+### Password Hashing
+
+```php
+// Hash password
+$hash = password_hash($password, PASSWORD_DEFAULT);
+
+// Verify password
+if (password_verify($inputPassword, $hash)) {
+    // Password correct
+}
+```
+
+### Secure Headers
+
+```php
+header('X-Frame-Options: SAMEORIGIN');
+header('X-Content-Type-Options: nosniff');
+header('X-XSS-Protection: 1; mode=block');
+header('Strict-Transport-Security: max-age=31536000');
+```
+
+### Content Security Policy
+
+```php
+header("Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'");
+```

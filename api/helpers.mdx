@@ -1,0 +1,309 @@
+---
+title: 'Helper Functions'
+description: 'Utility functions for common tasks in S-PHP'
+---
+
+## Overview
+
+S-PHP provides a collection of helper functions to simplify common development tasks such as asset management, security, redirects, and environment configuration.
+
+## Asset Management
+
+### asset()
+
+Generates a URL path for public assets.
+
+```php
+function asset($path)
+```
+
+<ParamField path="path" type="string" required>
+  The relative path to the asset file
+</ParamField>
+
+<ParamField path="Returns" type="string">
+  The full path to the asset prefixed with `/public/`
+</ParamField>
+
+#### Usage Example
+
+```php
+// In your view/template
+<link rel="stylesheet" href="<?= asset('css/style.css') ?>">
+<!-- Output: <link rel="stylesheet" href="/public/css/style.css"> -->
+
+<script src="<?= asset('js/app.js') ?>"></script>
+<!-- Output: <script src="/public/js/app.js"></script> -->
+
+<img src="<?= asset('images/logo.png') ?>" alt="Logo">
+<!-- Output: <img src="/public/images/logo.png" alt="Logo"> -->
+```
+
+## Security
+
+### sanitizeHtml()
+
+Sanitizes HTML input by removing dangerous content while preserving safe tags.
+
+```php
+function sanitizeHtml($input)
+```
+
+<ParamField path="input" type="string|array" required>
+  The input to sanitize. Can be a string or array of strings.
+</ParamField>
+
+<ParamField path="Returns" type="string|array">
+  The sanitized input with dangerous content removed
+</ParamField>
+
+#### Allowed Tags
+
+`<p>`, `<br>`, `<b>`, `<strong>`, `<i>`, `<em>`, `<ul>`, `<ol>`, `<li>`, `<a>`, `<img>`, `<blockquote>`, `<span>`, `<div>`, `<h1>`, `<h2>`, `<h3>`, `<h4>`, `<h5>`, `<h6>`
+
+#### Usage Example
+
+```php
+// Sanitize user input
+$userInput = $_POST['content'];
+$clean = sanitizeHtml($userInput);
+
+// Sanitize array of inputs
+$comments = [
+    '<script>alert("XSS")</script>Hello',
+    '<p onclick="alert()">Safe paragraph</p>'
+];
+$cleanComments = sanitizeHtml($comments);
+// Result: ['Hello', '<p>Safe paragraph</p>']
+```
+
+#### Features
+
+- Removes `<script>` and `<style>` tags
+- Strips event handlers (onclick, onload, etc.)
+- Removes inline styles
+- Blocks dangerous protocols (javascript:, data:) except for valid base64 images
+- Recursively sanitizes arrays
+
+### csrf()
+
+Generates and outputs a hidden CSRF token input field.
+
+```php
+function csrf()
+```
+
+<ParamField path="Returns" type="void">
+  Echoes a hidden input field containing the CSRF token
+</ParamField>
+
+#### Usage Example
+
+```php
+<form method="POST" action="/submit">
+    <?php csrf(); ?>
+    <!-- Output: <input type="hidden" name="csrf_token" value="...token..."> -->
+    
+    <input type="text" name="username">
+    <button type="submit">Submit</button>
+</form>
+```
+
+### validateCsrfToken()
+
+Validates a CSRF token against the session token.
+
+```php
+function validateCsrfToken($token)
+```
+
+<ParamField path="token" type="string" required>
+  The CSRF token to validate (typically from form submission)
+</ParamField>
+
+<ParamField path="Returns" type="bool">
+  Returns `true` if the token is valid, `false` otherwise
+</ParamField>
+
+#### Usage Example
+
+```php
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $token = $_POST['csrf_token'] ?? '';
+    
+    if (!validateCsrfToken($token)) {
+        die('Invalid CSRF token');
+    }
+    
+    // Process the form
+    // ...
+}
+```
+
+## Routing
+
+### redirect()
+
+Redirects the user to a specified URL with an optional flash message.
+
+```php
+function redirect($url, $message = "")
+```
+
+<ParamField path="url" type="string" required>
+  The URL to redirect to
+</ParamField>
+
+<ParamField path="message" type="string" default="">
+  Optional flash message to store in the session
+</ParamField>
+
+<ParamField path="Returns" type="void">
+  Sends a Location header to redirect the browser
+</ParamField>
+
+#### Usage Example
+
+```php
+// Simple redirect
+redirect('/dashboard');
+
+// Redirect with flash message
+redirect('/login', 'Please log in to continue');
+
+// In the destination page, retrieve the message:
+if (isset($_SESSION['message'])) {
+    echo $_SESSION['message'];
+    unset($_SESSION['message']);
+}
+```
+
+## Environment Configuration
+
+### loadEnv()
+
+Loads environment variables from a .env file.
+
+```php
+function loadEnv($filePath)
+```
+
+<ParamField path="filePath" type="string" required>
+  The path to the .env file
+</ParamField>
+
+<ParamField path="Returns" type="bool">
+  Returns `true` on success, or calls `dd()` if the file is not found
+</ParamField>
+
+#### .env File Format
+
+```bash
+DB_HOST=localhost
+DB_NAME=myapp
+DB_USER=root
+DB_PASS=secret
+APP_ENV=development
+```
+
+#### Usage Example
+
+```php
+// Load environment variables
+loadEnv(__DIR__ . '/.env');
+
+// Access variables using env()
+$dbHost = env('DB_HOST');
+```
+
+### env()
+
+Retrieves an environment variable value.
+
+```php
+function env($key, $default = null)
+```
+
+<ParamField path="key" type="string" required>
+  The environment variable name
+</ParamField>
+
+<ParamField path="default" type="mixed" default="null">
+  The default value to return if the variable is not set
+</ParamField>
+
+<ParamField path="Returns" type="mixed">
+  The environment variable value or the default value
+</ParamField>
+
+#### Usage Example
+
+```php
+// Get environment variable
+$dbHost = env('DB_HOST', 'localhost');
+$dbPort = env('DB_PORT', 3306);
+$appEnv = env('APP_ENV', 'production');
+
+// Use in configuration
+$config = [
+    'host' => env('DB_HOST'),
+    'database' => env('DB_NAME'),
+    'username' => env('DB_USER'),
+    'password' => env('DB_PASS'),
+];
+```
+
+## Debugging
+
+### dd()
+
+Dump and die - outputs a variable's contents and terminates script execution.
+
+```php
+function dd($arr)
+```
+
+<ParamField path="arr" type="mixed" required>
+  The variable to dump (can be any type, not just arrays)
+</ParamField>
+
+<ParamField path="Returns" type="void">
+  Outputs the variable contents in a formatted `<pre>` block and stops execution
+</ParamField>
+
+#### Usage Example
+
+```php
+// Debug an array
+$users = ['Alice', 'Bob', 'Charlie'];
+dd($users);
+// Script execution stops here
+
+// Debug an object
+$user = new User();
+dd($user);
+
+// Debug request data
+dd($_POST);
+
+// Debug environment variables
+dd($_ENV);
+```
+
+#### Output Example
+
+```
+Array
+(
+    [0] => Alice
+    [1] => Bob
+    [2] => Charlie
+)
+```
+
+## Notes
+
+- All helper functions are globally available without needing to import or use namespaces
+- CSRF tokens are stored in the session and should be validated on all state-changing requests
+- The `sanitizeHtml()` function is designed for content that needs to preserve some HTML formatting while being safe from XSS attacks
+- Always use `env()` to access environment variables rather than directly accessing `$_ENV` or `$_SERVER`

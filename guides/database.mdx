@@ -1,0 +1,402 @@
+---
+title: Database
+description: Learn how to work with the Database class and execute queries in S-PHP
+---
+
+## Overview
+
+The `Database` class in S-PHP provides a PDO-based database connection with support for prepared statements, protecting your application from SQL injection attacks.
+
+## Database Configuration
+
+Database credentials are stored in `app/config/config.php` and loaded from environment variables:
+
+```php app/config/config.php
+return [
+    'host' => $_ENV['DB_HOST'] ?? 'localhost',
+    'port' => $_ENV['DB_PORT'] ?? '3306',
+    'database' => $_ENV['DB_DATABASE'] ?? 'new',
+    'username' => $_ENV['DB_USERNAME'] ?? 'root',
+    'password' => $_ENV['DB_PASSWORD'] ?? 'root',
+];
+```
+
+## Database Class
+
+The `Database` class automatically creates a PDO connection when instantiated.
+
+### Constructor
+
+<ParamField path="__construct" type="method">
+  <ParamField path="$config" type="array" required>
+    Configuration array containing database connection details (host, port, database, username, password)
+  </ParamField>
+</ParamField>
+
+```php Sphp/Core/Database.php
+public function __construct($config)
+{
+    $dsn = 'mysql:host=' . $config['host'] . ';port='. $config['port'] .';dbname=' . $config['database'];
+
+    $this->connection = new \PDO($dsn, $config['username'], $config['password']);
+}
+```
+
+### Connection Property
+
+<ParamField path="$connection" type="PDO">
+  The PDO database connection instance used for all queries
+</ParamField>
+
+## Creating a Database Instance
+
+You can create a database instance manually:
+
+```php
+use Sphp\Core\Database;
+
+$config = require('../app/config/config.php');
+$db = new Database($config);
+```
+
+However, in most cases, you'll access the database through controllers or models where it's already initialized:
+
+```php
+class HomeController extends Controller
+{
+    public function index()
+    {
+        // $this->db is automatically available
+        $users = $this->db->query('SELECT * FROM users');
+    }
+}
+```
+
+## Query Method
+
+The `query()` method executes SQL queries using prepared statements.
+
+<ParamField path="query" type="method">
+  <ParamField path="$query" type="string" required>
+    SQL query with placeholders (`?`) for parameters
+  </ParamField>
+  
+  <ParamField path="$params" type="array" default="array()">
+    Array of values to bind to query placeholders
+  </ParamField>
+</ParamField>
+
+```php Sphp/Core/Database.php
+public function query($query, $params = array())
+{
+    $statement = $this->connection->prepare($query);
+
+    $statement->execute($params);
+
+    return $statement->fetchAll(\PDO::FETCH_ASSOC);
+}
+```
+
+### Return Value
+
+The method returns an array of associative arrays, where each element represents a database row:
+
+```php
+[
+    ['id' => 1, 'name' => 'John', 'email' => 'john@example.com'],
+    ['id' => 2, 'name' => 'Jane', 'email' => 'jane@example.com'],
+]
+```
+
+## Using Prepared Statements
+
+Prepared statements protect against SQL injection by separating SQL logic from data.
+
+### SELECT Queries
+
+```php
+// Select all users
+$users = $db->query('SELECT * FROM users');
+
+// Select with WHERE clause
+$activeUsers = $db->query(
+    'SELECT * FROM users WHERE verified = ?',
+    [1]
+);
+
+// Multiple conditions
+$result = $db->query(
+    'SELECT * FROM users WHERE verified = ? AND role = ?',
+    [1, 'admin']
+);
+
+// With ORDER BY and LIMIT
+$recent = $db->query(
+    'SELECT * FROM posts WHERE status = ? ORDER BY created_at DESC LIMIT ?',
+    ['published', 10]
+);
+```
+
+### INSERT Queries
+
+```php
+$db->query(
+    'INSERT INTO users (name, email, password) VALUES (?, ?, ?)',
+    ['John Doe', 'john@example.com', password_hash('secret', PASSWORD_BCRYPT)]
+);
+```
+
+### UPDATE Queries
+
+```php
+$db->query(
+    'UPDATE users SET name = ?, verified = ? WHERE id = ?',
+    ['Jane Doe', 1, 123]
+);
+```
+
+### DELETE Queries
+
+```php
+$db->query(
+    'DELETE FROM users WHERE id = ?',
+    [123]
+);
+```
+
+## Working with Query Results
+
+### Accessing Results
+
+```php
+$users = $db->query('SELECT * FROM users WHERE verified = ?', [1]);
+
+// Loop through results
+foreach ($users as $user) {
+    echo $user['name'] . ' - ' . $user['email'];
+}
+
+// Get first result
+$firstUser = $users[0] ?? null;
+
+// Check if results exist
+if (!empty($users)) {
+    // Process results
+}
+
+// Count results
+$count = count($users);
+```
+
+### Single Record Queries
+
+```php
+$user = $db->query(
+    'SELECT * FROM users WHERE id = ?',
+    [123]
+);
+
+// Access the first (and only) result
+$userData = $user[0] ?? null;
+
+if ($userData) {
+    echo $userData['name'];
+}
+```
+
+## Complex Queries
+
+### JOIN Operations
+
+```php
+$query = '
+    SELECT u.*, p.title, p.content
+    FROM users u
+    LEFT JOIN posts p ON u.id = p.user_id
+    WHERE u.verified = ?
+    ORDER BY p.created_at DESC
+';
+
+$results = $db->query($query, [1]);
+```
+
+### Aggregate Functions
+
+```php
+// Count records
+$result = $db->query(
+    'SELECT COUNT(*) as total FROM users WHERE verified = ?',
+    [1]
+);
+$total = $result[0]['total'];
+
+// Other aggregates
+$stats = $db->query('
+    SELECT 
+        COUNT(*) as total,
+        AVG(age) as average_age,
+        MAX(created_at) as last_signup
+    FROM users
+    WHERE verified = ?
+', [1]);
+```
+
+## Using Database in Controllers
+
+```php app/Controllers/UserController.php
+use Sphp\Core\Controller;
+use Sphp\Core\View;
+
+class UserController extends Controller
+{
+    public function index()
+    {
+        $users = $this->db->query(
+            'SELECT id, name, email FROM users WHERE verified = ?',
+            [1]
+        );
+        
+        View::render('users/index.php', ['users' => $users]);
+    }
+    
+    public function show($id)
+    {
+        $user = $this->db->query(
+            'SELECT * FROM users WHERE id = ?',
+            [$id]
+        );
+        
+        if (empty($user)) {
+            // Handle not found
+            View::render('404.html');
+            return;
+        }
+        
+        View::render('users/show.php', ['user' => $user[0]]);
+    }
+}
+```
+
+## Using Database in Models
+
+The base `Models` class uses the `Database` class internally:
+
+```php Sphp/Core/Models.php
+class Models
+{
+    protected $db;
+    
+    public function __construct()
+    {
+        $this->env = require('../app/config/config.php');
+        $this->db = new Database($this->env);
+    }
+    
+    public function select(array $columns, array $where = [], string $orderBy = '', int $limit = 0)
+    {
+        // Build query...
+        return $this->db->query($query, $params);
+    }
+}
+```
+
+## Security Features
+
+<CardGroup cols={2}>
+  <Card title="Prepared Statements" icon="shield-check">
+    All queries use PDO prepared statements with parameter binding to prevent SQL injection.
+  </Card>
+  
+  <Card title="Automatic Escaping" icon="lock">
+    PDO automatically escapes parameters, eliminating manual sanitization needs.
+  </Card>
+  
+  <Card title="Type Safety" icon="check-double">
+    Parameters are properly typed and bound to prevent type juggling attacks.
+  </Card>
+  
+  <Card title="Connection Security" icon="key">
+    PDO connection uses secure MySQL connection protocols.
+  </Card>
+</CardGroup>
+
+## Best Practices
+
+### Always Use Parameters
+
+```php
+// UNSAFE - Never do this!
+$id = $_GET['id'];
+$query = "SELECT * FROM users WHERE id = $id";
+$result = $db->query($query);
+
+// SAFE - Always use prepared statements
+$id = $_GET['id'];
+$result = $db->query('SELECT * FROM users WHERE id = ?', [$id]);
+```
+
+### Use Models When Possible
+
+For standard CRUD operations, use the `Models` class instead of raw queries:
+
+```php
+// Instead of:
+$users = $this->db->query('SELECT * FROM users WHERE verified = ?', [1]);
+
+// Use:
+$userModel = new Users();
+$users = $userModel->select(['*'], ['verified' => 1]);
+```
+
+### Handle Empty Results
+
+```php
+$users = $db->query('SELECT * FROM users WHERE id = ?', [$id]);
+
+if (empty($users)) {
+    // Handle no results found
+    return null;
+}
+
+$user = $users[0];
+```
+
+### Use Transactions for Multiple Operations
+
+```php
+try {
+    $db->connection->beginTransaction();
+    
+    $db->query('INSERT INTO users (...) VALUES (...)', [...]);
+    $db->query('INSERT INTO user_profiles (...) VALUES (...)', [...]);
+    
+    $db->connection->commit();
+} catch (Exception $e) {
+    $db->connection->rollBack();
+    throw $e;
+}
+```
+
+## Environment Variables
+
+Set up your `.env` file for database configuration:
+
+```bash .env
+DB_HOST=localhost
+DB_PORT=3306
+DB_DATABASE=my_database
+DB_USERNAME=my_user
+DB_PASSWORD=my_password
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Models" icon="database" href="/guides/models">
+    Learn how to use the Models class for database operations
+  </Card>
+  
+  <Card title="Controllers" icon="code" href="/guides/controllers">
+    See how to use the database in your controllers
+  </Card>
+</CardGroup>

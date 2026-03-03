@@ -1,0 +1,78 @@
+---
+title: 'CLI Overview'
+description: 'Command-line interface for S-PHP framework'
+---
+
+# CLI Overview
+
+The S-PHP framework includes a powerful command-line interface (CLI) tool called `do` that helps you quickly scaffold files, manage your development server, and handle database migrations.
+
+## Getting Started
+
+The CLI tool is accessed through the `do` script in your project root:
+
+```bash
+php do [command] [arguments]
+```
+
+## Available Commands
+
+The CLI provides three categories of commands:
+
+### Server Commands
+
+- **`up`** - Start the PHP built-in development server
+- **`work`** - Run the job worker for background tasks
+
+### File Generators
+
+- **`controller [Name]`** - Generate a new controller class
+- **`middleware [Name]`** - Generate a new middleware class
+- **`model [Name]`** - Generate a new model class
+- **`views [path]`** - Generate a new view file
+
+### Database Commands
+
+- **`migrate`** - Run database migrations
+- **`migration [Name]`** - Create a new migration file
+
+## Getting Help
+
+Display the help menu with all available commands:
+
+```bash
+php do help
+```
+
+## Quick Examples
+
+```bash
+# Start development server
+php do up
+
+# Create a controller
+php do controller UserController
+
+# Create a view
+php do views home/index
+
+# Run migrations
+php do migrate
+```
+
+## Command Structure
+
+The CLI tool is implemented in two main files:
+
+- **`do`** (Command.php:4) - Entry point script that processes command-line arguments
+- **`Command.php`** (Command.php:9) - Main CLI handler class that executes commands
+
+All commands follow a consistent pattern:
+
+```bash
+php do [command-type] [name-or-path]
+```
+
+Where:
+- `command-type` is one of the available commands listed above
+- `name-or-path` is the identifier for the resource being created (not required for server commands)

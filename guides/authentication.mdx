@@ -1,0 +1,489 @@
+---
+title: Authentication
+description: Learn how to implement user authentication with JWT tokens in S-PHP
+---
+
+## Overview
+
+The `Auth` service in S-PHP provides a complete JWT-based authentication system with support for access tokens, refresh tokens, secure sessions, and cookie management.
+
+## Authentication Methods
+
+The `Auth` class provides static methods for user authentication:
+
+- `login()` - Authenticate users and generate tokens
+- `logout()` - Clear user session and tokens
+- `user()` - Get the currently authenticated user
+- `check()` - Verify if a user is authenticated
+- `refresh()` - Refresh expired access tokens
+
+## Login Method
+
+The `login()` method authenticates a user and returns JWT tokens.
+
+<ParamField path="Auth::login" type="method">
+  <ParamField path="$credentials" type="array" required>
+    Associative array containing 'email' and 'password' keys
+  </ParamField>
+</ParamField>
+
+```php Sphp/Services/Auth.php
+public static function login($credentials)
+{
+    self::initialize();
+    self::startSecureSession();
+
+    if (!is_array($credentials)) {
+        throw new Exception("Expected user credentials as an array, received something else.");
+    }
+
+    $email = $credentials['email'] ?? null;
+    $password = $credentials['password'] ?? null;
+
+    if (!$email || !$password) {
+        throw new Exception("Email and password are required for authentication.");
+    }
+    
+    $user = new Users();
+    $user = $user->select(['*'], ['email'=> $email])[0];
+    
+    if (!$user || !password_verify($password, $user['password'])) {
+        throw new Exception("Invalid email or password.");
+    }
+
+    $userId = $user['id'];
+    $username = $user['name'];
+
+    // Generate JWT tokens
+    $tokens = self::$jwtAuthService->generateTokens($userId, $username);
+
+    // Store tokens in session
+    $_SESSION['user_token'] = $tokens['access_token'];
+    $_SESSION['refresh_token'] = $tokens['refresh_token'];
+
+    // Store tokens in secure cookies
+    $accessTokenLifetime = 15 * 60;  // 15 minutes
+    $refreshTokenLifetime = 7 * 24 * 60 * 60;  // 7 days
+
+    setcookie('user_token', $tokens['access_token'], [
+        'expires' => time() + $accessTokenLifetime,
+        'path' => '/',
+        'secure' => true,
+        'httponly' => true,
+        'samesite' => 'Strict',
+    ]);
+
+    setcookie('refresh_token', $tokens['refresh_token'], [
+        'expires' => time() + $refreshTokenLifetime,
+        'path' => '/',
+        'secure' => true,
+        'httponly' => true,
+        'samesite' => 'Strict',
+    ]);
+
+    return [
+        'access_token' => $tokens['access_token'],
+        'refresh_token' => $tokens['refresh_token']
+    ];
+}
+```
+
+### Login Example
+
+```php app/Controllers/AuthController.php
+use Sphp\Core\Controller;
+use Sphp\Core\Request;
+use Sphp\Services\Auth;
+
+class AuthController extends Controller
+{
+    public function login()
+    {
+        try {
+            $request = Request::request();
+            
+            $tokens = Auth::login([
+                'email' => $request['email'],
+                'password' => $request['password']
+            ]);
+            
+            return $this->successResponse("Login success", $tokens);
+        } catch (Exception $e) {
+            return $this->errorResponse($e->getMessage());
+        }
+    }
+}
+```
+
+### Login Return Value
+
+```php
+[
+    'access_token' => 'eyJ0eXAiOiJKV1QiLCJhbGc...',
+    'refresh_token' => 'eyJ0eXAiOiJKV1QiLCJhbGc...'
+]
+```
+
+## Logout Method
+
+The `logout()` method clears the user's session and removes authentication cookies.
+
+<ParamField path="Auth::logout" type="method">
+  No parameters required
+</ParamField>
+
+```php Sphp/Services/Auth.php
+public static function logout()
+{
+    self::startSecureSession();
+
+    // Unset session variables and destroy session
+    session_unset();
+    session_destroy();
+
+    // Clear cookies
+    setcookie('user_token', '', [
+        'expires' => time() - 3600,
+        'path' => '/',
+        'secure' => true,
+        'httponly' => true,
+        'samesite' => 'Strict'
+    ]);
+
+    setcookie('refresh_token', '', [
+        'expires' => time() - 3600,
+        'path' => '/',
+        'secure' => true,
+        'httponly' => true,
+        'samesite' => 'Strict'
+    ]);
+
+    return ['message' => 'Logged out successfully'];
+}
+```
+
+### Logout Example
+
+```php
+use Sphp\Services\Auth;
+
+class AuthController extends Controller
+{
+    public function logout()
+    {
+        $result = Auth::logout();
+        return $this->successResponse($result['message']);
+    }
+}
+```
+
+## User Method
+
+The `user()` method retrieves the currently authenticated user, automatically refreshing tokens if needed.
+
+<ParamField path="Auth::user" type="method">
+  <ParamField path="$token" type="string|null" default="null">
+    Optional access token to validate. If not provided, checks session and cookies.
+  </ParamField>
+</ParamField>
+
+```php Sphp/Services/Auth.php
+public static function user($token = null)
+{
+    self::initialize();
+    self::startSecureSession();
+
+    // Use provided token or fallback to session/cookie
+    $accessToken = $token ?? $_SESSION['user_token'] ?? $_COOKIE['user_token'] ?? null;
+    $refreshToken = $_SESSION['refresh_token'] ?? $_COOKIE['refresh_token'] ?? null;
+
+    if (!$accessToken) {
+        return null; // No user logged in
+    }
+
+    // Validate access token
+    $decodedUser = self::$jwtAuthService->JwtValidate($accessToken);
+
+    if (!$decodedUser && $refreshToken) {
+        // Token is invalid or expired, attempt to refresh
+        $newTokens = self::$jwtAuthService->refreshToken($refreshToken);
+
+        if ($newTokens) {
+            // Update session and cookies with new tokens
+            $_SESSION['user_token'] = $newTokens['access_token'];
+            $_SESSION['refresh_token'] = $newTokens['refresh_token'];
+
+            $accessTokenLifetime = 15 * 60;
+            $refreshTokenLifetime = 7 * 24 * 60 * 60;
+
+            setcookie('user_token', $newTokens['access_token'], [
+                'expires' => time() + $accessTokenLifetime,
+                'path' => '/',
+                'secure' => true,
+                'httponly' => true,
+                'samesite' => 'Strict'
+            ]);
+
+            setcookie('refresh_token', $newTokens['refresh_token'], [
+                'expires' => time() + $refreshTokenLifetime,
+                'path' => '/',
+                'secure' => true,
+                'httponly' => true,
+                'samesite' => 'Strict'
+            ]);
+
+            return self::$jwtAuthService->JwtValidate($newTokens['access_token']);
+        } else {
+            self::logout();
+            return null;
+        }
+    }
+
+    return $decodedUser;
+}
+```
+
+### User Method Example
+
+```php
+use Sphp\Services\Auth;
+
+class DashboardController extends Controller
+{
+    public function index()
+    {
+        $user = Auth::user();
+        
+        if (!$user) {
+            // Redirect to login
+            header('Location: /login');
+            exit;
+        }
+        
+        View::render('dashboard.php', ['user' => $user]);
+    }
+}
+```
+
+## Check Method
+
+The `check()` method verifies if a user is currently authenticated.
+
+<ParamField path="Auth::check" type="method">
+  <ParamField path="$token" type="string|null" default="null">
+    Optional access token to validate. If not provided, checks session and cookies.
+  </ParamField>
+</ParamField>
+
+```php Sphp/Services/Auth.php
+public static function check($token = null): bool
+{
+    self::initialize();
+    self::startSecureSession();
+
+    $accessToken = $token ?? $_SESSION['user_token'] ?? $_COOKIE['user_token'] ?? null;
+    $refreshToken = $_SESSION['refresh_token'] ?? $_COOKIE['refresh_token'] ?? null;
+
+    if (!$accessToken) {
+        return false;
+    }
+
+    $decodedUser = self::$jwtAuthService->JwtValidate($accessToken);
+
+    if (!$decodedUser && $refreshToken) {
+        $newTokens = self::$jwtAuthService->refreshToken($refreshToken);
+
+        if ($newTokens) {
+            // Update tokens
+            $_SESSION['user_token'] = $newTokens['access_token'];
+            $_SESSION['refresh_token'] = $newTokens['refresh_token'];
+
+            // Update cookies...
+            return (bool) self::$jwtAuthService->JwtValidate($newTokens['access_token']);
+        }
+        return false;
+    }
+
+    return (bool) $decodedUser;
+}
+```
+
+### Check Method Example
+
+```php
+use Sphp\Services\Auth;
+
+class ProfileController extends Controller
+{
+    public function show()
+    {
+        if (!Auth::check()) {
+            return $this->errorResponse('Unauthorized', 401);
+        }
+        
+        $user = Auth::user();
+        View::render('profile.php', ['user' => $user]);
+    }
+}
+```
+
+## Token Lifecycle
+
+### Access Token
+- **Lifetime**: 15 minutes
+- **Purpose**: Short-lived token for API requests
+- **Storage**: Session and HTTP-only cookie
+
+### Refresh Token
+- **Lifetime**: 7 days
+- **Purpose**: Long-lived token to obtain new access tokens
+- **Storage**: Session and HTTP-only cookie
+
+### Automatic Token Refresh
+
+When an access token expires, the `user()` and `check()` methods automatically:
+1. Detect the expired access token
+2. Use the refresh token to generate new tokens
+3. Update session and cookies with new tokens
+4. Return the authenticated user
+
+If the refresh token is also expired or invalid, the user is logged out.
+
+## Security Features
+
+<CardGroup cols={2}>
+  <Card title="JWT Tokens" icon="key">
+    Uses JSON Web Tokens for stateless authentication with automatic expiration.
+  </Card>
+  
+  <Card title="HTTP-Only Cookies" icon="cookie">
+    Tokens stored in HTTP-only cookies prevent XSS attacks from accessing them.
+  </Card>
+  
+  <Card title="Secure Sessions" icon="lock">
+    Sessions configured with secure, HTTP-only, and SameSite=Strict settings.
+  </Card>
+  
+  <Card title="Password Verification" icon="shield-check">
+    Uses `password_verify()` to securely compare hashed passwords.
+  </Card>
+</CardGroup>
+
+## Middleware Pattern
+
+Create authentication middleware to protect routes:
+
+```php app/Middleware/AuthMiddleware.php
+use Sphp\Services\Auth;
+
+class AuthMiddleware
+{
+    public static function handle()
+    {
+        if (!Auth::check()) {
+            header('Location: /login');
+            exit;
+        }
+        
+        return Auth::user();
+    }
+}
+```
+
+```php
+class ProtectedController extends Controller
+{
+    public function index()
+    {
+        $user = AuthMiddleware::handle();
+        
+        View::render('protected.php', ['user' => $user]);
+    }
+}
+```
+
+## Complete Authentication Flow
+
+```php app/Controllers/AuthController.php
+use Sphp\Core\Controller;
+use Sphp\Core\Request;
+use Sphp\Core\View;
+use Sphp\Services\Auth;
+
+class AuthController extends Controller
+{
+    public function showLogin()
+    {
+        // Redirect if already logged in
+        if (Auth::check()) {
+            header('Location: /dashboard');
+            exit;
+        }
+        
+        View::render('auth/login.php');
+    }
+    
+    public function login()
+    {
+        try {
+            $request = Request::request();
+            
+            $tokens = Auth::login($request);
+            
+            return $this->successResponse("Login successful", $tokens);
+        } catch (Exception $e) {
+            return $this->errorResponse($e->getMessage(), 401);
+        }
+    }
+    
+    public function logout()
+    {
+        Auth::logout();
+        header('Location: /login');
+        exit;
+    }
+    
+    public function me()
+    {
+        $user = Auth::user();
+        
+        if (!$user) {
+            return $this->errorResponse('Unauthorized', 401);
+        }
+        
+        return $this->successResponse('User retrieved', $user);
+    }
+}
+```
+
+## Best Practices
+
+1. **Always validate credentials**: Check both email and password before authentication
+2. **Use HTTPS**: Ensure secure cookie transmission in production
+3. **Handle token expiration**: The Auth service handles this automatically
+4. **Protect routes**: Use `Auth::check()` to protect sensitive routes
+5. **Clear tokens on logout**: Always call `Auth::logout()` to clear all authentication data
+6. **Store tokens securely**: Never expose tokens in URLs or client-side JavaScript
+
+## Environment Configuration
+
+The Auth service relies on the JWT service and session configuration. Ensure your environment is properly configured:
+
+```php
+// Session is automatically configured with:
+ini_set('session.cookie_secure', 0);      // Set to 1 in production with HTTPS
+ini_set('session.cookie_httponly', 1);    // Prevent JavaScript access
+ini_set('session.cookie_samesite', 'Strict'); // CSRF protection
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Controllers" icon="code" href="/guides/controllers">
+    Learn how to use Auth in your controllers
+  </Card>
+  
+  <Card title="Models" icon="database" href="/guides/models">
+    Understand how to work with user models
+  </Card>
+</CardGroup>

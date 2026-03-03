@@ -1,0 +1,251 @@
+---
+title: 'View'
+description: 'API reference for the View class'
+---
+
+# View
+
+The View class handles template rendering with support for layouts, components, and dynamic data injection.
+
+## Namespace
+
+```php
+Sphp\Core\View
+```
+
+## Methods
+
+### render()
+
+Renders a view file with optional data and processes template directives.
+
+```php
+public static function render($filename, $data = [])
+```
+
+<ParamField path="filename" type="string" required>
+  The view filename relative to `../app/views/` directory (e.g., `'home.php'`, `'users/profile.php'`)
+</ParamField>
+
+<ParamField path="data" type="array" default="[]">
+  Associative array of variables to extract and make available in the view
+</ParamField>
+
+<ResponseField name="void" type="void">
+  Renders the view directly to output. If the view file is not found, renders `404.html`
+</ResponseField>
+
+#### Behavior
+
+- Extracts the `$data` array into individual variables accessible in the view
+- Processes template directives (`@layout`, `@component`) before rendering
+- Evaluates the resulting PHP content
+- Renders `404.html` if the view file doesn't exist
+
+#### Example
+
+```php
+use Sphp\Core\View;
+
+// Simple view rendering
+View::render('home.php');
+
+// View with data
+View::render('profile.php', [
+    'user' => $userData,
+    'posts' => $userPosts
+]);
+
+// In the view file (profile.php):
+// <?php echo $user['name']; ?>
+// <?php foreach ($posts as $post): ?>
+//   <h2><?php echo $post['title']; ?></h2>
+// <?php endforeach; ?>
+```
+
+---
+
+## Template Directives
+
+The View class supports special directives for including layouts and components.
+
+### @layout Directive
+
+Includes a layout file from the `../app/views/layout/` directory with optional variables.
+
+#### Syntax
+
+```php
+@layout('layout-name')
+@layout('layout-name', ['key' => 'value'])
+```
+
+<ParamField path="layout-name" type="string" required>
+  The layout filename without extension (e.g., `'main'` looks for `layout/main.php`)
+</ParamField>
+
+<ParamField path="variables" type="array" optional>
+  Optional associative array of variables to pass to the layout
+</ParamField>
+
+#### Example
+
+```php
+// In your view file (page.php):
+@layout('main', ['title' => 'Home Page', 'showNav' => true])
+
+<div class="content">
+    <h1>Welcome</h1>
+</div>
+
+// In layout/main.php:
+<!DOCTYPE html>
+<html>
+<head>
+    <title><?php echo $title ?? 'Default Title'; ?></title>
+</head>
+<body>
+    <?php if ($showNav): ?>
+        <nav>Navigation here</nav>
+    <?php endif; ?>
+    <!-- Page content is inserted here -->
+</body>
+</html>
+```
+
+---
+
+### @component Directive
+
+Includes a component file from the `app/views/components/` directory with optional data.
+
+#### Syntax
+
+```php
+@component('component-name')
+@component('component-name', $variableName)
+```
+
+<ParamField path="component-name" type="string" required>
+  The component filename without extension (e.g., `'button'` looks for `components/button.php`)
+</ParamField>
+
+<ParamField path="variableName" type="string" optional>
+  Variable name from the `$data` array to pass to the component (must start with `$`)
+</ParamField>
+
+#### Example
+
+```php
+// In your controller:
+View::render('dashboard.php', [
+    'user' => ['name' => 'John', 'role' => 'admin'],
+    'stats' => ['posts' => 42, 'comments' => 128]
+]);
+
+// In dashboard.php:
+@component('header', $user)
+@component('stats-card', $stats)
+@component('footer')
+
+// In components/header.php:
+<header>
+    <h1>Welcome, <?php echo $name; ?></h1>
+    <span>Role: <?php echo $role; ?></span>
+</header>
+
+// In components/stats-card.php:
+<div class="stats">
+    <p>Posts: <?php echo $posts; ?></p>
+    <p>Comments: <?php echo $comments; ?></p>
+</div>
+```
+
+---
+
+## View File Structure
+
+Views are located in the `../app/views/` directory:
+
+```
+app/
+└── views/
+    ├── home.php
+    ├── users/
+    │   ├── index.php
+    │   └── profile.php
+    ├── layout/
+    │   ├── main.php
+    │   └── admin.php
+    ├── components/
+    │   ├── header.php
+    │   ├── footer.php
+    │   └── button.php
+    └── 404.html
+```
+
+---
+
+## Complete Example
+
+### Controller
+
+```php
+namespace App\Controllers;
+
+use Sphp\Core\Controller;
+use Sphp\Core\View;
+
+class BlogController extends Controller
+{
+    public function show($id)
+    {
+        $post = $this->db->query(
+            'SELECT * FROM posts WHERE id = ?',
+            [$id]
+        );
+        
+        $comments = $this->db->query(
+            'SELECT * FROM comments WHERE post_id = ? ORDER BY created_at DESC',
+            [$id]
+        );
+        
+        View::render('blog/post.php', [
+            'post' => $post[0],
+            'comments' => $comments,
+            'pageTitle' => $post[0]['title']
+        ]);
+    }
+}
+```
+
+### View File (blog/post.php)
+
+```php
+@layout('main', ['title' => $pageTitle])
+
+<article>
+    @component('breadcrumbs')
+    
+    <h1><?php echo htmlspecialchars($post['title']); ?></h1>
+    <div class="content">
+        <?php echo $post['content']; ?>
+    </div>
+    
+    <section class="comments">
+        <h2>Comments (<?php echo count($comments); ?>)</h2>
+        <?php foreach ($comments as $comment): ?>
+            @component('comment-card', $comment)
+        <?php endforeach; ?>
+    </section>
+</article>
+```
+
+## Important Notes
+
+1. **File Paths**: All view paths are relative to `../app/views/`
+2. **Layout Paths**: Layouts are loaded from `../app/views/layout/`
+3. **Component Paths**: Components are loaded from `app/views/components/`
+4. **Variable Extraction**: The `$data` array is automatically extracted using `extract()`
+5. **404 Handling**: Missing view files automatically render `404.html`
+6. **Directive Processing**: Directives are processed before PHP evaluation

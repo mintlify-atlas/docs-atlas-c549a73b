@@ -1,0 +1,355 @@
+---
+title: Models
+description: Learn how to work with models and perform database operations in S-PHP
+---
+
+## Overview
+
+Models in S-PHP provide an elegant way to interact with database tables. The `Models` class offers built-in methods for creating, reading, updating, and deleting records with automatic prepared statement protection.
+
+## Creating a Model
+
+Models are located in the `app/Models` directory and extend the `Sphp\Core\Models` class.
+
+```php app/Models/Users.php
+<?php
+
+namespace App\Models;
+
+use Sphp\Core\Models;
+
+class Users extends Models
+{
+    public function __construct()
+    {
+        $this->table = "users";
+        $this->fillables = ['email', 'name', 'password', 'verified'];
+        parent::__construct();
+    }
+    
+    public function save($data)
+    {
+        $data['password'] = password_hash($data['password'], PASSWORD_BCRYPT);
+        return $this->create($data);
+    }
+}
+```
+
+## Model Properties
+
+<ParamField path="$table" type="string" required>
+  The name of the database table this model represents
+</ParamField>
+
+<ParamField path="$fillables" type="array" required>
+  Array of column names that can be mass-assigned. Provides protection against unauthorized fields.
+</ParamField>
+
+<ParamField path="$env" type="array">
+  Environment configuration automatically loaded from config
+</ParamField>
+
+<ParamField path="$db" type="Database">
+  Database instance for executing queries
+</ParamField>
+
+<ParamField path="$hidden_fields" type="array">
+  Array of fields to hide from query results (e.g., passwords)
+</ParamField>
+
+## Create Records
+
+The `create()` method inserts a new record into the database.
+
+<ParamField path="create" type="method">
+  <ParamField path="$request" type="array" required>
+    Associative array of data to insert. Only fields listed in `$fillables` will be inserted.
+  </ParamField>
+</ParamField>
+
+```php Sphp/Core/Models.php
+public function create($request)
+{
+    try {
+        $data = array_intersect_key($request, array_flip($this->fillables));
+
+        if (empty($data)) {
+            throw new \Exception("No valid fields provided for insertion.");
+        }
+
+        $columns = implode(", ", array_keys($data));
+        $placeholders = implode(", ", array_fill(0, count($data), "?"));
+
+        $query = "INSERT INTO {$this->table} ({$columns}) VALUES ({$placeholders})";
+
+        $result = $this->db->query($query, array_values($data));
+
+        return $result;
+    } catch (\Exception $e) {
+       dd($e->getMessage());
+    }
+}
+```
+
+### Example Usage
+
+```php
+$user = new Users();
+$user->create([
+    'email' => 'user@example.com',
+    'name' => 'John Doe',
+    'password' => 'hashed_password',
+    'verified' => 1
+]);
+```
+
+## Update Records
+
+The `update()` method modifies an existing record.
+
+<ParamField path="update" type="method">
+  <ParamField path="$request" type="array" required>
+    Associative array of data to update. Only fields in `$fillables` will be updated.
+  </ParamField>
+  
+  <ParamField path="$id" type="int|string" required>
+    The ID of the record to update
+  </ParamField>
+</ParamField>
+
+```php Sphp/Core/Models.php
+public function update($request, $id)
+{
+    $data = array_intersect_key($request, array_flip($this->fillables));
+    if (empty($data)) {
+        throw new \Exception("No valid fields provided for updating.");
+    }
+
+    $updateFields = implode(", ", array_map(function ($field) {
+        return "$field = ?";
+    }, array_keys($data)));
+
+    $query = "UPDATE {$this->table} SET $updateFields WHERE id = ?";
+
+    $params = array_values($data);
+    $params[] = $id;
+
+    $this->db->query($query, $params);
+}
+```
+
+### Example Usage
+
+```php
+$user = new Users();
+$user->update([
+    'name' => 'Jane Doe',
+    'verified' => 1
+], 123);
+```
+
+## Delete Records
+
+The `delete()` method removes a record from the database.
+
+<ParamField path="delete" type="method">
+  <ParamField path="$id" type="int|string" required>
+    The ID of the record to delete
+  </ParamField>
+</ParamField>
+
+```php Sphp/Core/Models.php
+public function delete($id)
+{
+    if (empty($id)) {
+        throw new \Exception("No valid fields provided for updating.");
+    }
+
+    $query = "DELETE FROM {$this->table} WHERE id = ?";
+
+    $params[] = $id;
+
+    $this->db->query($query, $params);
+}
+```
+
+### Example Usage
+
+```php
+$user = new Users();
+$user->delete(123);
+```
+
+## Select Records
+
+The `select()` method queries records with flexible filtering options.
+
+<ParamField path="select" type="method">
+  <ParamField path="$columns" type="array" required>
+    Array of column names to select (e.g., `['id', 'name', 'email']` or `['*']`)
+  </ParamField>
+  
+  <ParamField path="$where" type="array" default="[]">
+    Associative array of WHERE conditions (e.g., `['status' => 'active', 'role' => 'admin']`)
+  </ParamField>
+  
+  <ParamField path="$orderBy" type="string" default="''">
+    ORDER BY clause (e.g., `'created_at DESC'`)
+  </ParamField>
+  
+  <ParamField path="$limit" type="int" default="0">
+    Maximum number of records to return. 0 means no limit.
+  </ParamField>
+</ParamField>
+
+```php Sphp/Core/Models.php
+public function select(array $columns, array $where = [], string $orderBy = '', int $limit = 0)
+{
+    if (empty($columns)) {
+        throw new \Exception("No valid fields provided for selection.");
+    }
+
+    $columns_in_string = implode(', ', $columns);
+
+    $where_string = '';
+    $params = [];
+    if (!empty($where)) {
+        $conditions = [];
+        foreach ($where as $column => $value) {
+            $conditions[] = "$column = ?";
+            $params[] = $value;
+        }
+        $where_string = 'WHERE ' . implode(' AND ', $conditions);
+    }
+
+    $order_by_string = $orderBy ? "ORDER BY $orderBy" : '';
+    $limit_string = $limit > 0 ? "LIMIT $limit" : '';
+
+    $query = "SELECT {$columns_in_string} FROM {$this->table} {$where_string} {$order_by_string} {$limit_string}";
+
+    $query = preg_replace('/\s+/', ' ', trim($query));
+
+    return $this->db->query($query, $params);
+}
+```
+
+### Example Usage
+
+```php
+$user = new Users();
+
+// Select all columns
+$allUsers = $user->select(['*']);
+
+// Select specific columns with WHERE clause
+$activeUsers = $user->select(
+    ['id', 'name', 'email'],
+    ['verified' => 1]
+);
+
+// With ordering and limit
+$recentUsers = $user->select(
+    ['*'],
+    ['verified' => 1],
+    'created_at DESC',
+    10
+);
+```
+
+## Find by ID
+
+The `findByID()` method retrieves a single record by its ID.
+
+<ParamField path="findByID" type="method">
+  <ParamField path="$id" type="int|string" required>
+    The ID of the record to find
+  </ParamField>
+</ParamField>
+
+```php Sphp/Core/Models.php
+public function findByID($id)
+{
+    if (empty($id)) {
+        throw new \Exception("No valid fields provided for selection.");
+    }
+
+    $query = "SELECT * FROM {$this->table} WHERE id = $id";
+    $result = $this->db->query($query);
+
+    return $result[0];
+}
+```
+
+### Example Usage
+
+```php
+$user = new Users();
+$user = $user->findByID(123);
+
+echo $user['name']; // Access user data
+```
+
+## Custom Model Methods
+
+You can add custom methods to your models for specific business logic:
+
+```php app/Models/Users.php
+class Users extends Models
+{
+    public function save($data)
+    {
+        $data['password'] = password_hash($data['password'], PASSWORD_BCRYPT);
+        return $this->create($data);
+    }
+    
+    public function findByEmail($email)
+    {
+        return $this->select(['*'], ['email' => $email])[0] ?? null;
+    }
+    
+    public function getVerifiedUsers()
+    {
+        return $this->select(['*'], ['verified' => 1]);
+    }
+}
+```
+
+## Security Features
+
+<CardGroup cols={2}>
+  <Card title="Mass Assignment Protection" icon="shield-check">
+    Only fields in `$fillables` can be assigned, preventing unauthorized database modifications.
+  </Card>
+  
+  <Card title="Prepared Statements" icon="lock">
+    All queries use PDO prepared statements, protecting against SQL injection attacks.
+  </Card>
+  
+  <Card title="Input Filtering" icon="filter">
+    Data is automatically filtered using `array_intersect_key()` to match fillable fields.
+  </Card>
+  
+  <Card title="Exception Handling" icon="triangle-exclamation">
+    Built-in exception handling for common errors and edge cases.
+  </Card>
+</CardGroup>
+
+## Best Practices
+
+1. **Always define fillables**: Protect your database by explicitly listing allowed fields
+2. **Use custom methods**: Create specific methods for complex queries or business logic
+3. **Hash passwords**: Always hash passwords in custom save methods
+4. **Validate input**: Validate data before passing to model methods
+5. **Handle exceptions**: Wrap model operations in try-catch blocks in your controllers
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Database" icon="database" href="/guides/database">
+    Learn about the underlying Database class and raw queries
+  </Card>
+  
+  <Card title="Controllers" icon="code" href="/guides/controllers">
+    See how to use models in your controllers
+  </Card>
+</CardGroup>

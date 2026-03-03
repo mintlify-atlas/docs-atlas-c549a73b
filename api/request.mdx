@@ -1,0 +1,59 @@
+---
+title: 'Request'
+description: 'Handle HTTP request data in S-PHP'
+---
+
+## Overview
+
+The `Request` class provides methods to access HTTP request data in your S-PHP application.
+
+## Methods
+
+### request()
+
+Retrieves POST request data.
+
+```php
+public static function request()
+```
+
+<ParamField path="Returns" type="array|null">
+  Returns the `$_POST` array if the request method is POST, otherwise returns null.
+</ParamField>
+
+#### Usage Example
+
+```php
+use Sphp\Core\Request;
+
+// Get POST data
+$data = Request::request();
+
+if ($data) {
+    $username = $data['username'] ?? '';
+    $email = $data['email'] ?? '';
+}
+```
+
+#### Example with Form Submission
+
+```php
+use Sphp\Core\Request;
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $formData = Request::request();
+    
+    // Access form fields
+    $name = $formData['name'];
+    $message = $formData['message'];
+    
+    // Process the data
+    // ...
+}
+```
+
+## Notes
+
+- This method only returns data for POST requests
+- For GET requests or other HTTP methods, the method returns null
+- Always check if the returned value is not null before accessing array keys

@@ -1,0 +1,581 @@
+---
+title: 'JobQueue & Job'
+description: 'Background job queue system for asynchronous task processing'
+---
+
+## Overview
+
+The job queue system provides a simple file-based queue for processing background tasks asynchronously. It consists of two main classes:
+
+- **JobQueue**: Manages the queue, adding, retrieving, and executing jobs
+- **Job**: Represents an individual task to be executed
+
+<Note>
+Jobs are stored in a JSON file (`jobs.json`) and processed sequentially. This system is ideal for lightweight background tasks like sending emails.
+</Note>
+
+---
+
+# JobQueue Class
+
+## Overview
+
+The `JobQueue` class manages a persistent queue of jobs stored in a JSON file.
+
+```php
+use App\Services\JobQueue;
+
+$queue = new JobQueue();
+```
+
+## Methods
+
+### addJob()
+
+Adds a new job to the queue.
+
+```php
+$queue->addJob(Job $job): void
+```
+
+<ParamField body="job" type="Job" required>
+  A Job instance to add to the queue
+</ParamField>
+
+#### Example
+
+```php
+use App\Services\JobQueue;
+use App\Services\Job;
+
+$queue = new JobQueue();
+
+$emailJob = new Job('Send Email', [
+    'email' => 'user@example.com',
+    'subject' => 'Welcome',
+    'message' => '<h1>Welcome!</h1>'
+]);
+
+$queue->addJob($emailJob);
+```
+
+#### Behavior
+
+- Generates a unique job ID using `uniqid('job_', true)`
+- Extracts task name and data from the Job object
+- Appends job to existing jobs in the queue file
+- Saves updated queue to `jobs.json`
+
+---
+
+### getJobs()
+
+Retrieves all jobs currently in the queue.
+
+```php
+$queue->getJobs(): array
+```
+
+<ResponseField type="array">
+  Array of job objects, each containing:
+  
+  <Expandable title="job structure">
+    <ResponseField name="id" type="string">
+      Unique job identifier (e.g., "job_65a1b2c3d4e5f6.12345678")
+    </ResponseField>
+    
+    <ResponseField name="taskName" type="string">
+      Name of the task to execute
+    </ResponseField>
+    
+    <ResponseField name="taskData" type="array">
+      Task-specific data
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+#### Example
+
+```php
+$queue = new JobQueue();
+$jobs = $queue->getJobs();
+
+foreach ($jobs as $job) {
+    echo "Job ID: " . $job['id'] . "\n";
+    echo "Task: " . $job['taskName'] . "\n";
+    print_r($job['taskData']);
+}
+```
+
+#### Output Format
+
+```php
+[
+    [
+        'id' => 'job_65a1b2c3d4e5f6.12345678',
+        'taskName' => 'Send Email',
+        'taskData' => [
+            'email' => 'user@example.com',
+            'subject' => 'Welcome',
+            'message' => '<h1>Welcome!</h1>'
+        ]
+    ],
+    // ... more jobs
+]
+```
+
+---
+
+### removeJobById()
+
+Removes a specific job from the queue by ID.
+
+```php
+$queue->removeJobById(string $id): void
+```
+
+<ParamField body="id" type="string" required>
+  The unique job ID to remove
+</ParamField>
+
+#### Example
+
+```php
+$queue = new JobQueue();
+$queue->removeJobById('job_65a1b2c3d4e5f6.12345678');
+```
+
+#### Behavior
+
+- Filters out the job with matching ID
+- Re-indexes the array using `array_values()`
+- Saves updated queue to file
+- Does nothing if job ID doesn't exist
+
+---
+
+### executeJobs()
+
+Executes all jobs in the queue and removes them upon completion.
+
+```php
+$queue->executeJobs(): void
+```
+
+#### Example
+
+```php
+$queue = new JobQueue();
+$queue->executeJobs();
+```
+
+#### Behavior
+
+1. Retrieves all jobs from the queue
+2. Iterates through each job
+3. Validates job has required fields (`taskName`, `taskData`, `id`)
+4. Creates a Job instance from the data
+5. Sets session message: `'Mail sent successfully please check your email'`
+6. Executes the job via `$jobInstance->execute()`
+7. Removes the job from queue after successful execution
+8. Skips jobs with missing required fields
+
+<Warning>
+This method sets session variables. Ensure sessions are started before calling.
+</Warning>
+
+---
+
+## Queue Storage
+
+Jobs are stored in a JSON file:
+
+```php
+private $queueFile = __DIR__ . '/jobs.json';
+```
+
+**Location**: `~/workspace/source/app/Services/jobs.json`
+
+**Format**:
+```json
+[
+  {
+    "id": "job_65a1b2c3d4e5f6.12345678",
+    "taskName": "Send Email",
+    "taskData": {
+      "email": "user@example.com",
+      "subject": "Welcome",
+      "message": "<h1>Welcome!</h1>"
+    }
+  }
+]
+```
+
+---
+
+# Job Class
+
+## Overview
+
+The `Job` class represents an individual task with execution logic.
+
+```php
+use App\Services\Job;
+
+$job = new Job($taskName, $taskData);
+```
+
+## Constructor
+
+```php
+new Job(string $taskName, array $taskData)
+```
+
+<ParamField body="taskName" type="string" required>
+  The name/type of task to execute (e.g., "Send Email")
+</ParamField>
+
+<ParamField body="taskData" type="array" required>
+  Task-specific data required for execution
+</ParamField>
+
+#### Example
+
+```php
+$job = new Job('Send Email', [
+    'email' => 'user@example.com',
+    'subject' => 'Password Reset',
+    'message' => '<p>Click here to reset your password</p>'
+]);
+```
+
+---
+
+## Methods
+
+### getTaskName()
+
+Returns the task name.
+
+```php
+$job->getTaskName(): string
+```
+
+#### Example
+
+```php
+$taskName = $job->getTaskName();
+echo $taskName; // "Send Email"
+```
+
+---
+
+### getTaskData()
+
+Returns the task data.
+
+```php
+$job->getTaskData(): array
+```
+
+#### Example
+
+```php
+$data = $job->getTaskData();
+print_r($data);
+// Output:
+// Array
+// (
+//     [email] => user@example.com
+//     [subject] => Password Reset
+//     [message] => <p>Click here to reset your password</p>
+// )
+```
+
+---
+
+### execute()
+
+Executes the job based on its task name.
+
+```php
+$job->execute(): void
+```
+
+#### Example
+
+```php
+$job = new Job('Send Email', [
+    'email' => 'user@example.com',
+    'subject' => 'Welcome',
+    'message' => '<h1>Welcome!</h1>'
+]);
+
+$job->execute(); // Sends the email
+```
+
+#### Supported Tasks
+
+Currently supports:
+
+- **"Send Email"**: Sends an email via SMTPMailer service
+
+#### Behavior
+
+1. Checks task name
+2. Routes to appropriate private method (e.g., `sendEmail()`)
+3. Executes the task
+4. Handles any exceptions during execution
+
+---
+
+## Email Task
+
+When task name is `"Send Email"`, the job executes the email sending task.
+
+### Required Task Data
+
+<ParamField body="email" type="string" required>
+  Recipient email address
+</ParamField>
+
+<ParamField body="subject" type="string" required>
+  Email subject line
+</ParamField>
+
+<ParamField body="message" type="string" required>
+  Email body content (supports HTML)
+</ParamField>
+
+### Example
+
+```php
+use App\Services\Job;
+
+$emailJob = new Job('Send Email', [
+    'email' => 'user@example.com',
+    'subject' => 'Your Order Confirmation',
+    'message' => '
+        <h1>Order Confirmed</h1>
+        <p>Your order #12345 has been confirmed.</p>
+        <p>Thank you for your purchase!</p>
+    '
+]);
+
+$emailJob->execute();
+```
+
+### Email Sending Details
+
+- Sender address: `no-reply@example.com` (hardcoded)
+- Uses `SMTPMailer::getInstance()` to send
+- Exceptions are caught and logged using `dd()`
+
+---
+
+## Complete Usage Example
+
+### Adding Jobs to Queue
+
+```php
+use App\Services\JobQueue;
+use App\Services\Job;
+
+// Create queue instance
+$queue = new JobQueue();
+
+// Add welcome email job
+$welcomeJob = new Job('Send Email', [
+    'email' => 'newuser@example.com',
+    'subject' => 'Welcome to Our Platform',
+    'message' => '
+        <div style="font-family: Arial, sans-serif;">
+            <h1>Welcome!</h1>
+            <p>Thank you for joining our platform.</p>
+            <p>Get started by completing your profile.</p>
+        </div>
+    '
+]);
+$queue->addJob($welcomeJob);
+
+// Add password reset job
+$resetJob = new Job('Send Email', [
+    'email' => 'user@example.com',
+    'subject' => 'Password Reset Request',
+    'message' => '
+        <div>
+            <h2>Password Reset</h2>
+            <p>Click the link below to reset your password:</p>
+            <a href="https://example.com/reset?token=abc123">Reset Password</a>
+        </div>
+    '
+]);
+$queue->addJob($resetJob);
+```
+
+---
+
+### Processing Queue (Worker Script)
+
+```php
+// worker.php - Run this script periodically (e.g., via cron)
+use App\Services\JobQueue;
+
+require_once __DIR__ . '/vendor/autoload.php';
+
+session_start();
+
+$queue = new JobQueue();
+
+echo "Processing jobs...\n";
+
+$jobs = $queue->getJobs();
+echo "Found " . count($jobs) . " jobs in queue\n";
+
+if (count($jobs) > 0) {
+    $queue->executeJobs();
+    echo "All jobs processed successfully\n";
+} else {
+    echo "No jobs to process\n";
+}
+```
+
+---
+
+### Cron Job Setup
+
+Process the queue every minute:
+
+```bash
+* * * * * /usr/bin/php /path/to/worker.php >> /var/log/job-queue.log 2>&1
+```
+
+Or every 5 minutes:
+
+```bash
+*/5 * * * * /usr/bin/php /path/to/worker.php >> /var/log/job-queue.log 2>&1
+```
+
+---
+
+### Monitoring Queue
+
+```php
+use App\Services\JobQueue;
+
+$queue = new JobQueue();
+$jobs = $queue->getJobs();
+
+echo "Current queue status:\n";
+echo "Total jobs: " . count($jobs) . "\n\n";
+
+foreach ($jobs as $index => $job) {
+    echo "Job #" . ($index + 1) . ":\n";
+    echo "  ID: " . $job['id'] . "\n";
+    echo "  Task: " . $job['taskName'] . "\n";
+    echo "  Recipient: " . ($job['taskData']['email'] ?? 'N/A') . "\n";
+    echo "\n";
+}
+```
+
+---
+
+## Error Handling
+
+### Queue File Errors
+
+```php
+// Throws Exception if JSON encoding fails
+throw new Exception("Failed to encode jobs to JSON: " . json_last_error_msg());
+
+// Throws Exception if file write fails
+throw new Exception("Failed to write to file '{$this->queueFile}': Unknown error");
+```
+
+### Email Sending Errors
+
+```php
+// Job catches exceptions from SMTPMailer
+try {
+    $mailer->sendEmail('no-reply@example.com', $to, $subject, $message);
+} catch (Exception $e) {
+    dd("Failed to send email to $to with subject: $subject. Error: " . $e->getMessage());
+}
+```
+
+---
+
+## Extending the Job System
+
+To add new task types:
+
+1. **Add new task handler in Job class**:
+
+```php
+public function execute()
+{
+    if ($this->taskName === 'Send Email') {
+        $this->sendEmail();
+    } elseif ($this->taskName === 'Process Payment') {
+        $this->processPayment();
+    } elseif ($this->taskName === 'Generate Report') {
+        $this->generateReport();
+    }
+}
+
+private function processPayment()
+{
+    $orderId = $this->taskData['order_id'];
+    $amount = $this->taskData['amount'];
+    
+    // Payment processing logic
+}
+
+private function generateReport()
+{
+    $reportType = $this->taskData['type'];
+    $startDate = $this->taskData['start_date'];
+    
+    // Report generation logic
+}
+```
+
+2. **Add jobs with new task names**:
+
+```php
+$paymentJob = new Job('Process Payment', [
+    'order_id' => 12345,
+    'amount' => 99.99,
+    'currency' => 'USD'
+]);
+$queue->addJob($paymentJob);
+```
+
+---
+
+## Performance Considerations
+
+<CardGroup cols={2}>
+  <Card title="File Locking" icon="lock">
+    Consider implementing file locking for concurrent access in high-traffic scenarios.
+  </Card>
+
+  <Card title="Database Queue" icon="database">
+    For production systems with high volume, consider migrating to a database-backed queue.
+  </Card>
+
+  <Card title="Queue Limits" icon="gauge">
+    Monitor queue size and implement job expiration/cleanup for old jobs.
+  </Card>
+
+  <Card title="Error Recovery" icon="rotate">
+    Implement retry logic and failed job tracking for reliability.
+  </Card>
+</CardGroup>
+
+---
+
+## Source References
+
+- JobQueue: `~/workspace/source/app/Services/JobQueue.php`
+- Job: `~/workspace/source/app/Services/Job.php`

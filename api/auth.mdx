@@ -1,0 +1,260 @@
+---
+title: 'Auth Service'
+description: 'JWT-based authentication service with session management'
+---
+
+## Overview
+
+The `Auth` service provides a complete authentication system with JWT tokens, secure sessions, and automatic token refresh. It handles user login, logout, authentication checking, and token management.
+
+<Note>
+The Auth service uses JWT tokens stored in both sessions and HTTP-only cookies for security. Access tokens expire after 15 minutes, while refresh tokens last 7 days.
+</Note>
+
+## Methods
+
+### login()
+
+Authenticates a user with email and password credentials.
+
+```php
+Auth::login(array $credentials): array
+```
+
+<ParamField body="credentials" type="array" required>
+  User credentials containing email and password
+  
+  <Expandable title="properties">
+    <ParamField body="email" type="string" required>
+      User's email address
+    </ParamField>
+    
+    <ParamField body="password" type="string" required>
+      User's password (plain text, will be verified against hashed password)
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ResponseField name="access_token" type="string">
+  JWT access token (valid for 15 minutes)
+</ResponseField>
+
+<ResponseField name="refresh_token" type="string">
+  JWT refresh token (valid for 7 days)
+</ResponseField>
+
+#### Example
+
+```php
+use Sphp\Services\Auth;
+
+try {
+    $tokens = Auth::login([
+        'email' => 'user@example.com',
+        'password' => 'secure_password'
+    ]);
+    
+    echo "Access Token: " . $tokens['access_token'];
+    echo "Refresh Token: " . $tokens['refresh_token'];
+} catch (Exception $e) {
+    echo "Login failed: " . $e->getMessage();
+}
+```
+
+#### Behavior
+
+- Validates email and password are provided
+- Verifies password using `password_verify()`
+- Generates JWT access and refresh tokens
+- Stores tokens in session (`$_SESSION['user_token']`, `$_SESSION['refresh_token']`)
+- Sets secure HTTP-only cookies with `Strict` SameSite policy
+- Throws `Exception` on invalid credentials or missing fields
+
+---
+
+### logout()
+
+Logs out the current user by clearing session and tokens.
+
+```php
+Auth::logout(): array
+```
+
+<ResponseField name="message" type="string">
+  Success message: "Logged out successfully"
+</ResponseField>
+
+#### Example
+
+```php
+use Sphp\Services\Auth;
+
+$result = Auth::logout();
+echo $result['message']; // "Logged out successfully"
+```
+
+#### Behavior
+
+- Destroys the current session (`session_unset()`, `session_destroy()`)
+- Clears `user_token` and `refresh_token` cookies by setting expiration to past time
+- Removes all authentication state
+
+---
+
+### user()
+
+Retrieves the currently authenticated user's data from the token.
+
+```php
+Auth::user(?string $token = null): ?array
+```
+
+<ParamField body="token" type="string" optional>
+  Optional access token. If not provided, uses token from session or cookie
+</ParamField>
+
+<ResponseField name="id" type="int">
+  User ID
+</ResponseField>
+
+<ResponseField name="name" type="string">
+  User name
+</ResponseField>
+
+<ResponseField name="exp" type="int">
+  Token expiration timestamp
+</ResponseField>
+
+#### Example
+
+```php
+use Sphp\Services\Auth;
+
+$user = Auth::user();
+
+if ($user) {
+    echo "User ID: " . $user['id'];
+    echo "Name: " . $user['name'];
+} else {
+    echo "No user logged in";
+}
+
+// Or provide a specific token
+$user = Auth::user($customToken);
+```
+
+#### Behavior
+
+- Returns `null` if no valid token is found
+- Validates the access token using JWT signature and expiration
+- Automatically attempts token refresh if access token is expired but refresh token is valid
+- Updates session and cookies with new tokens after successful refresh
+- Logs out user if refresh token is also invalid
+- Returns decoded JWT payload containing user data
+
+---
+
+### check()
+
+Checks if a user is currently authenticated.
+
+```php
+Auth::check(?string $token = null): bool
+```
+
+<ParamField body="token" type="string" optional>
+  Optional access token. If not provided, uses token from session or cookie
+</ParamField>
+
+<ResponseField type="bool">
+  Returns `true` if user is authenticated, `false` otherwise
+</ResponseField>
+
+#### Example
+
+```php
+use Sphp\Services\Auth;
+
+if (Auth::check()) {
+    echo "User is logged in";
+} else {
+    echo "User is not logged in";
+}
+
+// Check a specific token
+if (Auth::check($customToken)) {
+    echo "Token is valid";
+}
+```
+
+#### Behavior
+
+- Returns `false` if no token is found
+- Validates the access token
+- Automatically attempts token refresh if access token is expired
+- Updates session and cookies with new tokens after successful refresh
+- Returns boolean indicating authentication status
+
+---
+
+### refresh()
+
+Manually refreshes the access and refresh tokens.
+
+```php
+Auth::refresh(): array
+```
+
+<ResponseField name="access_token" type="string">
+  New JWT access token (valid for 15 minutes)
+</ResponseField>
+
+<ResponseField name="refresh_token" type="string">
+  New JWT refresh token (valid for 7 days)
+</ResponseField>
+
+#### Example
+
+```php
+use Sphp\Services\Auth;
+
+try {
+    $newTokens = Auth::refresh();
+    
+    echo "New Access Token: " . $newTokens['access_token'];
+    echo "New Refresh Token: " . $newTokens['refresh_token'];
+} catch (Exception $e) {
+    echo "Token refresh failed: " . $e->getMessage();
+}
+```
+
+#### Behavior
+
+- Looks for refresh token in session or cookie
+- Throws `Exception` if no refresh token is found
+- Generates new access and refresh tokens
+- Updates session and cookies with new tokens
+- Throws `Exception` if token refresh fails
+- Returns new token pair
+
+---
+
+## Token Lifetimes
+
+| Token Type | Lifetime | Storage |
+|------------|----------|----------|
+| Access Token | 15 minutes | Session + Cookie |
+| Refresh Token | 7 days | Session + Cookie |
+
+## Cookie Security Settings
+
+All cookies are set with the following security options:
+
+- `secure: true` - Only transmitted over HTTPS
+- `httponly: true` - Not accessible via JavaScript
+- `samesite: 'Strict'` - Prevents CSRF attacks
+- `path: '/'` - Available site-wide
+
+## Source Reference
+
+Location: `~/workspace/source/Sphp/Services/Auth.php`

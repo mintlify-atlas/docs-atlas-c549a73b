@@ -1,0 +1,196 @@
+---
+title: 'Job Queue'
+description: 'Queue and execute background tasks in S-PHP'
+---
+
+## Overview
+
+The Job Queue system in S-PHP allows you to queue tasks for later execution, particularly useful for time-consuming operations like sending emails. Jobs are stored in a JSON file and can be executed asynchronously.
+
+## Creating Jobs
+
+### Job Class
+
+The `Job` class represents a single task to be executed:
+
+```php
+use App\Services\Job;
+
+$job = new Job('Send Email', [
+    'email' => 'user@example.com',
+    'subject' => 'Welcome',
+    'message' => '<h1>Welcome to our platform!</h1>',
+    'is_html' => true
+]);
+```
+
+### Job Structure
+
+Each job contains:
+- `taskName` - The name of the task (e.g., "Send Email")
+- `taskData` - Array of data needed to execute the task
+
+## JobQueue Service
+
+The `JobQueue` class manages the job queue:
+
+### Adding Jobs to Queue
+
+```php
+use App\Services\JobQueue;
+use App\Services\Job;
+
+$jobQueue = new JobQueue();
+
+$job = new Job('Send Email', [
+    'email' => 'recipient@example.com',
+    'subject' => 'Test Subject',
+    'message' => '<p>Email body content</p>'
+]);
+
+$jobQueue->addJob($job);
+```
+
+### Executing Jobs
+
+Execute all queued jobs:
+
+```php
+$jobQueue->executeJobs();
+```
+
+This method:
+1. Retrieves all jobs from the queue
+2. Executes each job based on its task name
+3. Removes successfully executed jobs from the queue
+
+### Retrieving Jobs
+
+Get all jobs currently in the queue:
+
+```php
+$jobs = $jobQueue->getJobs();
+// Returns array of job data
+```
+
+### Removing Jobs
+
+Remove a specific job by ID:
+
+```php
+$jobQueue->removeJobById('job_123456');
+```
+
+## Built-in Task Types
+
+### Send Email Task
+
+The framework includes built-in support for email sending:
+
+```php
+$job = new Job('Send Email', [
+    'email' => 'user@example.com',
+    'subject' => 'Order Confirmation',
+    'message' => '<h2>Thank you for your order!</h2>'
+]);
+```
+
+When executed, this task:
+- Uses the SMTPMailer service
+- Sends from `no-reply@example.com` by default
+- Supports HTML email content
+
+## Storage
+
+Jobs are stored in:
+```
+app/Services/jobs.json
+```
+
+The storage format:
+
+```json
+[
+  {
+    "id": "job_64f2a1b3c4d5e",
+    "taskName": "Send Email",
+    "taskData": {
+      "email": "user@example.com",
+      "subject": "Welcome",
+      "message": "<h1>Hello!</h1>"
+    }
+  }
+]
+```
+
+## Custom Task Types
+
+Extend the `Job` class to add custom task types:
+
+```php
+namespace App\Services;
+
+class Job
+{
+    public function execute()
+    {
+        if ($this->taskName === 'Send Email') {
+            $this->sendEmail();
+        } elseif ($this->taskName === 'Process Image') {
+            $this->processImage();
+        }
+    }
+    
+    private function processImage()
+    {
+        // Custom task implementation
+        $imagePath = $this->taskData['path'];
+        // Process image...
+    }
+}
+```
+
+## Error Handling
+
+Jobs handle errors gracefully:
+
+```php
+private function sendEmail()
+{
+    try {
+        $mailer->sendEmail($from, $to, $subject, $message);
+    } catch (Exception $e) {
+        // Error is logged via dd()
+        dd("Failed to send email: " . $e->getMessage());
+    }
+}
+```
+
+## Best Practices
+
+1. **Queue Long-Running Tasks** - Use the job queue for operations that take time
+2. **Error Logging** - Always wrap job execution in try-catch blocks
+3. **Queue Cleanup** - Failed jobs should be logged and removed from the queue
+4. **Data Validation** - Validate taskData before adding jobs to the queue
+
+## Integration with SendMail
+
+The `SendMail` service automatically uses the job queue:
+
+```php
+use App\Services\SendMail;
+
+SendMail::sendMail(
+    'user@example.com',
+    'Welcome',
+    'welcome', // template name
+    ['name' => 'John Doe']
+);
+```
+
+This automatically:
+1. Creates a job
+2. Adds it to the queue
+3. Executes the job immediately
+
+See the [Email](/advanced/email) documentation for more details.

@@ -1,0 +1,359 @@
+---
+title: 'JwtAuthService'
+description: 'Singleton JWT token generation and validation service'
+---
+
+## Overview
+
+The `JwtAuthService` is a singleton service that handles JWT token generation, validation, encryption, and refresh token management. It uses HS256 algorithm for signing tokens and stores refresh tokens securely in the database.
+
+<Note>
+This is a singleton service. Always use `JwtAuthService::getInstance()` to access it.
+</Note>
+
+## Getting Instance
+
+### getInstance()
+
+Retrieves the singleton instance of JwtAuthService.
+
+```php
+JwtAuthService::getInstance(): JwtAuthService
+```
+
+#### Example
+
+```php
+use Sphp\Services\JwtAuthService;
+
+$jwtService = JwtAuthService::getInstance();
+```
+
+---
+
+## Methods
+
+### generateTokens()
+
+Generates both access and refresh JWT tokens for a user.
+
+```php
+$jwtService->generateTokens(int|string $userId, string $name): array
+```
+
+<ParamField body="userId" type="int|string" required>
+  The user's unique identifier
+</ParamField>
+
+<ParamField body="name" type="string" required>
+  The user's name to include in the token payload
+</ParamField>
+
+<ResponseField name="access_token" type="string">
+  JWT access token (expires in 30 seconds)
+</ResponseField>
+
+<ResponseField name="refresh_token" type="string">
+  JWT refresh token (expires in 7 days)
+</ResponseField>
+
+#### Example
+
+```php
+$jwtService = JwtAuthService::getInstance();
+
+$tokens = $jwtService->generateTokens(123, 'John Doe');
+
+echo "Access Token: " . $tokens['access_token'];
+echo "Refresh Token: " . $tokens['refresh_token'];
+```
+
+#### Behavior
+
+- Creates access token with payload: `{id, name, exp}`
+- Creates refresh token with payload: `{id, exp}`
+- Access token expires in 30 seconds (configured in `$accessTokenExpiry`)
+- Refresh token expires in 604800 seconds / 7 days (configured in `$refreshTokenExpiry`)
+- Stores hashed refresh token in `refresh_tokens` database table
+- Sets refresh token in HTTP-only cookie
+- Returns both tokens
+
+---
+
+### JwtEncrypt()
+
+Encrypts a payload into a JWT token.
+
+```php
+$jwtService->JwtEncrypt(array $payload): string
+```
+
+<ParamField body="payload" type="array" required>
+  The data to encode in the JWT token
+  
+  <Expandable title="common fields">
+    <ParamField body="id" type="int|string">
+      User identifier
+    </ParamField>
+    
+    <ParamField body="name" type="string">
+      User name
+    </ParamField>
+    
+    <ParamField body="exp" type="int">
+      Expiration timestamp (Unix timestamp)
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ResponseField type="string">
+  Encoded JWT token string
+</ResponseField>
+
+#### Example
+
+```php
+$jwtService = JwtAuthService::getInstance();
+
+$payload = [
+    'id' => 123,
+    'name' => 'John Doe',
+    'exp' => time() + 900 // 15 minutes
+];
+
+$token = $jwtService->JwtEncrypt($payload);
+echo "Token: " . $token;
+```
+
+#### Algorithm
+
+1. Base64 URL-encodes the header: `{"alg":"HS256","type":"JWT"}`
+2. Base64 URL-encodes the payload
+3. Creates signature using HMAC SHA256 with secret key
+4. Returns token format: `header.payload.signature`
+
+---
+
+### JwtValidate()
+
+Validates a JWT token and returns the decoded payload.
+
+```php
+$jwtService->JwtValidate(string $token): array|false
+```
+
+<ParamField body="token" type="string" required>
+  The JWT token to validate
+</ParamField>
+
+<ResponseField type="array|false">
+  Returns decoded payload array if valid, `false` if invalid or expired
+</ResponseField>
+
+#### Example
+
+```php
+$jwtService = JwtAuthService::getInstance();
+
+$decoded = $jwtService->JwtValidate($token);
+
+if ($decoded) {
+    echo "User ID: " . $decoded['id'];
+    echo "Name: " . $decoded['name'];
+    echo "Expires: " . date('Y-m-d H:i:s', $decoded['exp']);
+} else {
+    echo "Invalid or expired token";
+}
+```
+
+#### Validation Steps
+
+1. Splits token into header, payload, and signature
+2. Decodes header and payload from Base64
+3. Checks expiration time against current time
+4. Verifies signature using HMAC SHA256
+5. Returns decoded payload if all checks pass
+6. Returns `false` if token is invalid, expired, or malformed
+
+---
+
+### refreshToken()
+
+Refreshes an expired access token using a valid refresh token from cookies.
+
+```php
+$jwtService->refreshToken(): Response
+```
+
+<ResponseField name="status" type="int">
+  HTTP status code (200 for success, 401 for failure)
+</ResponseField>
+
+<ResponseField name="data" type="array">
+  New tokens object
+  
+  <Expandable title="properties">
+    <ResponseField name="access_token" type="string">
+      New access token
+    </ResponseField>
+    
+    <ResponseField name="refresh_token" type="string">
+      New refresh token
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+#### Example
+
+```php
+$jwtService = JwtAuthService::getInstance();
+
+$response = $jwtService->refreshToken();
+
+if ($response['status'] === 200) {
+    $tokens = $response['data'];
+    echo "New Access Token: " . $tokens['access_token'];
+    echo "New Refresh Token: " . $tokens['refresh_token'];
+} else {
+    echo "Refresh failed: " . $response['message'];
+}
+```
+
+#### Behavior
+
+- Retrieves refresh token from `user_token` cookie
+- Validates refresh token structure and expiration
+- Verifies refresh token exists in database (checks against hashed value)
+- Generates new access and refresh tokens
+- Returns Response object with status 200 and new tokens
+- Returns Response with status 401 if refresh token is missing, invalid, or not found in database
+
+---
+
+### regenerateJwt()
+
+Regenerates a new access token from an existing valid token.
+
+```php
+$jwtService->regenerateJwt(string $oldJwt): Response
+```
+
+<ParamField body="oldJwt" type="string" required>
+  The existing JWT token to regenerate from
+</ParamField>
+
+<ResponseField name="status" type="int">
+  HTTP status code (200 for success, 401 for failure)
+</ResponseField>
+
+<ResponseField name="data" type="string">
+  New JWT token
+</ResponseField>
+
+#### Example
+
+```php
+$jwtService = JwtAuthService::getInstance();
+
+$response = $jwtService->regenerateJwt($oldToken);
+
+if ($response['status'] === 200) {
+    echo "New Token: " . $response['data'];
+} else {
+    echo "Regeneration failed";
+}
+```
+
+---
+
+### revokeRefreshToken()
+
+Revokes a user's refresh token (typically used during logout).
+
+```php
+$jwtService->revokeRefreshToken(int|string $userId): Response
+```
+
+<ParamField body="userId" type="int|string" required>
+  The user ID whose refresh token should be revoked
+</ParamField>
+
+<ResponseField name="status" type="int">
+  HTTP status code (200 for success)
+</ResponseField>
+
+<ResponseField name="message" type="string">
+  Success message: "Refresh token revoked"
+</ResponseField>
+
+#### Example
+
+```php
+$jwtService = JwtAuthService::getInstance();
+
+$response = $jwtService->revokeRefreshToken(123);
+echo $response['message']; // "Refresh token revoked"
+```
+
+#### Behavior
+
+- Deletes refresh token from `refresh_tokens` table for the specified user
+- Clears the `user_token` cookie
+- Returns success response
+
+---
+
+## Configuration
+
+### Token Expiration Times
+
+```php
+private $accessTokenExpiry = 30;        // 30 seconds
+private $refreshTokenExpiry = 604800;   // 7 days (604800 seconds)
+```
+
+### JWT Header
+
+```php
+private $header = [
+    "alg" => "HS256",
+    "type" => "JWT"
+];
+```
+
+### Cookie Configuration
+
+Refresh tokens are stored in cookies with:
+
+- Name: `user_token`
+- Expiration: 7 days
+- Path: `/`
+- Secure: `true` (HTTPS only)
+- HttpOnly: `true` (not accessible via JavaScript)
+- SameSite: `None`
+- Domain: `.localhost.com`
+
+## Database Schema
+
+The service expects a `refresh_tokens` table with the following structure:
+
+```sql
+CREATE TABLE refresh_tokens (
+    user_id INT/VARCHAR,
+    token_hash VARCHAR(255),  -- Bcrypt hash of the token
+    expires_at DATETIME
+);
+```
+
+## Security Features
+
+1. **Token Signing**: Uses HMAC SHA256 for token signatures
+2. **Refresh Token Hashing**: Refresh tokens are stored as bcrypt hashes in database
+3. **Token Expiration**: Both access and refresh tokens have expiration timestamps
+4. **Secure Cookies**: HTTP-only, secure cookies prevent XSS attacks
+5. **Token Rotation**: Each refresh generates new access and refresh tokens
+6. **Single Session**: Only one refresh token per user (old tokens are deleted)
+
+## Source Reference
+
+Location: `~/workspace/source/Sphp/Services/JwtAuthService.php`

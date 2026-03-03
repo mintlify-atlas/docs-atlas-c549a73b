@@ -1,0 +1,320 @@
+---
+title: 'Database'
+description: 'API reference for the Database class'
+---
+
+# Database
+
+The Database class provides a PDO-based connection layer for MySQL database interactions with prepared statement support.
+
+## Namespace
+
+```php
+Sphp\Core\Database
+```
+
+## Properties
+
+### $connection
+
+The PDO database connection instance.
+
+```php
+public $connection;
+```
+
+<ParamField path="connection" type="\PDO">
+  The active PDO connection object used for database operations
+</ParamField>
+
+---
+
+## Constructor
+
+### __construct()
+
+Creates a new database connection using PDO with MySQL.
+
+```php
+public function __construct($config)
+```
+
+<ParamField path="config" type="array" required>
+  Configuration array containing database connection parameters:
+  - `host`: Database host address
+  - `port`: Database port number
+  - `database`: Database name
+  - `username`: Database username
+  - `password`: Database password
+</ParamField>
+
+#### Behavior
+
+- Builds a MySQL DSN (Data Source Name) string from the config
+- Creates a new PDO connection with the provided credentials
+- Stores the connection in the public `$connection` property
+
+#### Example
+
+```php
+use Sphp\Core\Database;
+
+$config = [
+    'host' => 'localhost',
+    'port' => '3306',
+    'database' => 'my_app',
+    'username' => 'root',
+    'password' => 'secret'
+];
+
+$db = new Database($config);
+```
+
+---
+
+## Methods
+
+### query()
+
+Executes a SQL query with optional parameters using prepared statements.
+
+```php
+public function query($query, $params = array())
+```
+
+<ParamField path="query" type="string" required>
+  The SQL query to execute. Use `?` placeholders for parameters (e.g., `'SELECT * FROM users WHERE id = ?'`)
+</ParamField>
+
+<ParamField path="params" type="array" default="[]">
+  Array of values to bind to the query placeholders in order
+</ParamField>
+
+<ResponseField name="results" type="array">
+  Returns an array of associative arrays containing the query results (using `PDO::FETCH_ASSOC`)
+</ResponseField>
+
+#### Behavior
+
+- Prepares the SQL statement using PDO's prepare method
+- Binds parameters safely to prevent SQL injection
+- Executes the prepared statement
+- Fetches all results as associative arrays
+- Returns an empty array if no results are found
+
+#### Example - SELECT Query
+
+```php
+// Select all users
+$users = $db->query('SELECT * FROM users');
+
+// Select user by ID
+$user = $db->query(
+    'SELECT * FROM users WHERE id = ?',
+    [42]
+);
+
+// Select with multiple conditions
+$activeUsers = $db->query(
+    'SELECT * FROM users WHERE status = ? AND role = ?',
+    ['active', 'admin']
+);
+
+foreach ($users as $user) {
+    echo $user['name'];
+}
+```
+
+#### Example - INSERT Query
+
+```php
+$result = $db->query(
+    'INSERT INTO users (name, email, password) VALUES (?, ?, ?)',
+    ['John Doe', 'john@example.com', password_hash('secret', PASSWORD_DEFAULT)]
+);
+
+// Get the last inserted ID
+$lastId = $db->connection->lastInsertId();
+```
+
+#### Example - UPDATE Query
+
+```php
+$db->query(
+    'UPDATE users SET name = ?, email = ? WHERE id = ?',
+    ['Jane Doe', 'jane@example.com', 42]
+);
+```
+
+#### Example - DELETE Query
+
+```php
+$db->query(
+    'DELETE FROM users WHERE id = ?',
+    [42]
+);
+```
+
+---
+
+## Connection Details
+
+### DSN Format
+
+The Database class constructs a MySQL DSN in the following format:
+
+```php
+mysql:host={host};port={port};dbname={database}
+```
+
+### PDO Configuration
+
+The connection is created with default PDO settings. You can access the connection directly for advanced configuration:
+
+```php
+$db = new Database($config);
+
+// Set error mode
+$db->connection->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+
+// Set fetch mode default
+$db->connection->setAttribute(PDO::ATTR_DEFAULT_FETCH_MODE, PDO::FETCH_ASSOC);
+
+// Use persistent connections
+$db->connection->setAttribute(PDO::ATTR_PERSISTENT, true);
+```
+
+---
+
+## Complete Example
+
+### Configuration File (config/config.php)
+
+```php
+return [
+    'host' => getenv('DB_HOST') ?: 'localhost',
+    'port' => getenv('DB_PORT') ?: '3306',
+    'database' => getenv('DB_NAME') ?: 'sphp_app',
+    'username' => getenv('DB_USER') ?: 'root',
+    'password' => getenv('DB_PASS') ?: ''
+];
+```
+
+### Usage in Controller
+
+```php
+namespace App\Controllers;
+
+use Sphp\Core\Controller;
+use Sphp\Core\View;
+
+class UserController extends Controller
+{
+    public function index()
+    {
+        // The database connection is available via $this->db
+        $users = $this->db->query(
+            'SELECT id, name, email FROM users WHERE status = ? ORDER BY created_at DESC',
+            ['active']
+        );
+        
+        View::render('users/index.php', ['users' => $users]);
+    }
+    
+    public function create()
+    {
+        $name = $_POST['name'];
+        $email = $_POST['email'];
+        $password = password_hash($_POST['password'], PASSWORD_DEFAULT);
+        
+        $this->db->query(
+            'INSERT INTO users (name, email, password, created_at) VALUES (?, ?, ?, NOW())',
+            [$name, $email, $password]
+        );
+        
+        $userId = $this->db->connection->lastInsertId();
+        
+        redirect('/users/' . $userId);
+    }
+    
+    public function update($id)
+    {
+        $this->db->query(
+            'UPDATE users SET name = ?, email = ?, updated_at = NOW() WHERE id = ?',
+            [$_POST['name'], $_POST['email'], $id]
+        );
+        
+        redirect('/users/' . $id);
+    }
+    
+    public function delete($id)
+    {
+        $this->db->query('DELETE FROM users WHERE id = ?', [$id]);
+        redirect('/users');
+    }
+}
+```
+
+---
+
+## Security Features
+
+### Prepared Statements
+
+The `query()` method uses PDO prepared statements to prevent SQL injection:
+
+```php
+// SAFE - uses prepared statements
+$userId = $_GET['id'];
+$user = $db->query('SELECT * FROM users WHERE id = ?', [$userId]);
+
+// UNSAFE - never do this!
+$user = $db->query("SELECT * FROM users WHERE id = {$userId}");
+```
+
+### Parameter Binding
+
+Parameters are automatically bound in order:
+
+```php
+$db->query(
+    'SELECT * FROM posts WHERE author_id = ? AND status = ? AND category = ?',
+    [$authorId, 'published', $category]
+);
+```
+
+---
+
+## Best Practices
+
+1. **Always use parameter binding**: Never concatenate user input into SQL queries
+2. **Check for empty results**: The `query()` method returns an empty array when no results are found
+3. **Use transactions for multiple operations**: Access `$db->connection` for transaction control
+4. **Handle exceptions**: Wrap database operations in try-catch blocks for error handling
+5. **Close connections**: PDO connections close automatically when the object is destroyed
+
+### Transaction Example
+
+```php
+try {
+    $db->connection->beginTransaction();
+    
+    $db->query(
+        'INSERT INTO orders (user_id, total) VALUES (?, ?)',
+        [$userId, $total]
+    );
+    $orderId = $db->connection->lastInsertId();
+    
+    foreach ($items as $item) {
+        $db->query(
+            'INSERT INTO order_items (order_id, product_id, quantity) VALUES (?, ?, ?)',
+            [$orderId, $item['id'], $item['qty']]
+        );
+    }
+    
+    $db->connection->commit();
+} catch (\Exception $e) {
+    $db->connection->rollBack();
+    throw $e;
+}
+```

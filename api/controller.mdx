@@ -1,0 +1,171 @@
+---
+title: 'Controller'
+description: 'API reference for the Controller base class'
+---
+
+# Controller
+
+The Controller class serves as the base class for all application controllers. It provides access to configuration and database instances.
+
+## Namespace
+
+```php
+Sphp\Core\Controller
+```
+
+## Constructor
+
+### __construct()
+
+Initializes the controller with environment configuration and database connection.
+
+```php
+public function __construct()
+```
+
+#### Behavior
+
+- Loads configuration from `../app/config/config.php`
+- Creates a new Database instance with the loaded configuration
+- Assigns the configuration to the `$env` property
+- Assigns the database instance to the `$db` property
+
+#### Example
+
+```php
+namespace App\Controllers;
+
+use Sphp\Core\Controller;
+
+class UserController extends Controller
+{
+    public function index()
+    {
+        // Access database through $this->db
+        $users = $this->db->query('SELECT * FROM users');
+        
+        // Access config through $this->env
+        $appName = $this->env['app_name'];
+    }
+}
+```
+
+---
+
+## Properties
+
+### $env
+
+Stores the application configuration array loaded from the config file.
+
+```php
+public $env;
+```
+
+<ParamField path="env" type="array">
+  Contains configuration values such as:
+  - `host`: Database host
+  - `port`: Database port
+  - `database`: Database name
+  - `username`: Database username
+  - `password`: Database password
+  - Additional application-specific settings
+</ParamField>
+
+#### Example
+
+```php
+class HomeController extends Controller
+{
+    public function index()
+    {
+        $dbHost = $this->env['host'];
+        $dbName = $this->env['database'];
+    }
+}
+```
+
+---
+
+### $db
+
+Provides access to the Database instance for executing queries.
+
+```php
+public $db;
+```
+
+<ParamField path="db" type="Sphp\Core\Database">
+  An instance of the Database class used to:
+  - Execute SQL queries
+  - Perform CRUD operations
+  - Interact with the database connection
+</ParamField>
+
+#### Example
+
+```php
+class PostController extends Controller
+{
+    public function show($id)
+    {
+        $post = $this->db->query(
+            'SELECT * FROM posts WHERE id = ?',
+            [$id]
+        );
+        
+        View::render('post.php', ['post' => $post[0]]);
+    }
+}
+```
+
+---
+
+## Usage Pattern
+
+All application controllers should extend the Controller base class to inherit configuration and database access:
+
+```php
+namespace App\Controllers;
+
+use Sphp\Core\Controller;
+use Sphp\Core\View;
+
+class ProductController extends Controller
+{
+    public function index()
+    {
+        // Query the database
+        $products = $this->db->query('SELECT * FROM products WHERE active = ?', [1]);
+        
+        // Access configuration
+        $perPage = $this->env['items_per_page'] ?? 10;
+        
+        // Render view
+        View::render('products/index.php', [
+            'products' => $products,
+            'perPage' => $perPage
+        ]);
+    }
+    
+    public function create()
+    {
+        $name = $_POST['name'];
+        $price = $_POST['price'];
+        
+        $this->db->query(
+            'INSERT INTO products (name, price) VALUES (?, ?)',
+            [$name, $price]
+        );
+        
+        redirect('/products');
+    }
+}
+```
+
+## Best Practices
+
+1. **Always extend Controller**: All application controllers should extend this base class
+2. **Use $this->db for queries**: Access the database through the `$db` property
+3. **Access config through $env**: Retrieve configuration values from the `$env` property
+4. **Keep controllers thin**: Delegate business logic to Models when possible
