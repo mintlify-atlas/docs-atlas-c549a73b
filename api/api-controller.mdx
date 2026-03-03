@@ -1,0 +1,431 @@
+---
+title: 'ApiController'
+description: 'API reference for the ApiController class for building REST APIs'
+---
+
+# ApiController
+
+The ApiController class extends the base Controller and provides specialized methods for building REST APIs with JSON responses, CORS support, and Bearer token authentication.
+
+## Namespace
+
+```php
+Sphp\Core\ApiController
+```
+
+## Extends
+
+```php
+Sphp\Core\Controller
+```
+
+## Properties
+
+### $rate_limiter
+
+Rate limiting configuration (currently set to 1000 requests).
+
+```php
+private $rate_limiter = 1000;
+```
+
+---
+
+## Methods
+
+### jsonResponse()
+
+Sends a JSON response with the specified HTTP status code.
+
+```php
+protected function jsonResponse(array $data, int $statusCode = 200): void
+```
+
+<ParamField path="data" type="array" required>
+  The data to encode and send as JSON
+</ParamField>
+
+<ParamField path="statusCode" type="int" default={200}>
+  HTTP status code for the response
+</ParamField>
+
+#### Example
+
+```php
+namespace App\Controllers;
+
+use Sphp\Core\ApiController;
+
+class UserApiController extends ApiController
+{
+    public function getUser($id)
+    {
+        $user = $this->db->query('SELECT * FROM users WHERE id = ?', [$id]);
+        
+        $this->jsonResponse([
+            'id' => $user[0]['id'],
+            'name' => $user[0]['name'],
+            'email' => $user[0]['email']
+        ], 200);
+    }
+}
+```
+
+---
+
+### errorResponse()
+
+Sends a standardized error response in JSON format.
+
+```php
+protected function errorResponse(string $message, int $statusCode = 400): void
+```
+
+<ParamField path="message" type="string" required>
+  Error message to display
+</ParamField>
+
+<ParamField path="statusCode" type="int" default={400}>
+  HTTP status code (400, 401, 403, 404, 500, etc.)
+</ParamField>
+
+#### Response Format
+
+```json
+{
+  "success": false,
+  "error": "Error message here"
+}
+```
+
+#### Example
+
+```php
+public function deleteUser($id)
+{
+    $user = $this->db->query('SELECT * FROM users WHERE id = ?', [$id]);
+    
+    if (empty($user)) {
+        $this->errorResponse('User not found', 404);
+    }
+    
+    $this->db->query('DELETE FROM users WHERE id = ?', [$id]);
+    $this->successResponse('User deleted successfully');
+}
+```
+
+---
+
+### successResponse()
+
+Sends a standardized success response in JSON format.
+
+```php
+protected function successResponse(string $message, array $data = [], int $statusCode = 200): void
+```
+
+<ParamField path="message" type="string" required>
+  Success message to display
+</ParamField>
+
+<ParamField path="data" type="array" default={[]}>
+  Optional data payload to include in the response
+</ParamField>
+
+<ParamField path="statusCode" type="int" default={200}>
+  HTTP status code (200, 201, 204, etc.)
+</ParamField>
+
+#### Response Format
+
+```json
+{
+  "success": true,
+  "message": "Success message",
+  "data": {
+    // Optional data object
+  }
+}
+```
+
+#### Example
+
+```php
+public function createUser()
+{
+    $name = $_POST['name'];
+    $email = $_POST['email'];
+    
+    $this->db->query(
+        'INSERT INTO users (name, email) VALUES (?, ?)',
+        [$name, $email]
+    );
+    
+    $this->successResponse('User created successfully', [
+        'id' => $this->db->connection->lastInsertId(),
+        'name' => $name,
+        'email' => $email
+    ], 201);
+}
+```
+
+---
+
+### setCorsHeaders()
+
+Sets CORS (Cross-Origin Resource Sharing) headers for API responses.
+
+```php
+protected function setCorsHeaders(): void
+```
+
+#### Headers Set
+
+- `Access-Control-Allow-Origin: *`
+- `Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS`
+- `Access-Control-Allow-Headers: Content-Type, Authorization`
+- `Access-Control-Max-Age: 86400`
+
+Automatically handles OPTIONS preflight requests by returning a 200 status code.
+
+#### Example
+
+```php
+public function apiEndpoint()
+{
+    $this->setCorsHeaders();
+    
+    // Your API logic here
+    $this->successResponse('Data retrieved', ['items' => $items]);
+}
+```
+
+---
+
+### getBearerToken()
+
+Extracts the Bearer token from the Authorization header.
+
+```php
+protected function getBearerToken(): ?string
+```
+
+#### Returns
+
+Returns the token string if found, or `null` if no Bearer token is present.
+
+#### Example
+
+```php
+public function protectedEndpoint()
+{
+    $token = $this->getBearerToken();
+    
+    if (!$token) {
+        $this->errorResponse('No token provided', 401);
+    }
+    
+    // Validate and use the token
+}
+```
+
+---
+
+### authenticate()
+
+Authenticates the API request using Bearer token authentication with automatic token refresh.
+
+```php
+protected function authenticate(): void
+```
+
+#### Behavior
+
+1. Sets CORS headers
+2. Extracts Bearer token from Authorization header
+3. Validates the token using `Auth::user()`
+4. If token is invalid/expired, attempts to refresh using `Auth::refresh()`
+5. Sets `$this->user` property with decoded user data
+6. Sends 401 error if authentication fails
+
+#### Example
+
+```php
+namespace App\Controllers;
+
+use Sphp\Core\ApiController;
+
+class ProtectedApiController extends ApiController
+{
+    public function getUserData()
+    {
+        // Authenticate the request
+        $this->authenticate();
+        
+        // $this->user now contains the authenticated user data
+        $userId = $this->user['id'];
+        
+        $data = $this->db->query(
+            'SELECT * FROM user_data WHERE user_id = ?',
+            [$userId]
+        );
+        
+        $this->successResponse('Data retrieved', ['data' => $data]);
+    }
+}
+```
+
+---
+
+## Complete Usage Example
+
+Here's a complete example of a REST API controller:
+
+```php
+<?php
+
+namespace App\Controllers;
+
+use Sphp\Core\ApiController;
+use Sphp\Core\Request;
+
+class ProductApiController extends ApiController
+{
+    // Public endpoint - no authentication required
+    public function list()
+    {
+        $this->setCorsHeaders();
+        
+        $products = $this->db->query('SELECT * FROM products WHERE active = ?', [1]);
+        
+        $this->successResponse('Products retrieved', [
+            'products' => $products,
+            'count' => count($products)
+        ]);
+    }
+    
+    // Protected endpoint - requires authentication
+    public function create()
+    {
+        $this->authenticate(); // Validates Bearer token
+        
+        $data = Request::request();
+        
+        if (empty($data['name']) || empty($data['price'])) {
+            $this->errorResponse('Name and price are required', 400);
+        }
+        
+        $this->db->query(
+            'INSERT INTO products (name, price, user_id) VALUES (?, ?, ?)',
+            [$data['name'], $data['price'], $this->user['id']]
+        );
+        
+        $this->successResponse('Product created successfully', [
+            'id' => $this->db->connection->lastInsertId()
+        ], 201);
+    }
+    
+    // Protected endpoint with parameter
+    public function update($id)
+    {
+        $this->authenticate();
+        
+        $product = $this->db->query('SELECT * FROM products WHERE id = ?', [$id]);
+        
+        if (empty($product)) {
+            $this->errorResponse('Product not found', 404);
+        }
+        
+        $data = Request::request();
+        
+        $this->db->query(
+            'UPDATE products SET name = ?, price = ? WHERE id = ?',
+            [$data['name'], $data['price'], $id]
+        );
+        
+        $this->successResponse('Product updated successfully');
+    }
+    
+    // Protected endpoint - delete
+    public function delete($id)
+    {
+        $this->authenticate();
+        
+        $product = $this->db->query('SELECT * FROM products WHERE id = ?', [$id]);
+        
+        if (empty($product)) {
+            $this->errorResponse('Product not found', 404);
+        }
+        
+        $this->db->query('DELETE FROM products WHERE id = ?', [$id]);
+        
+        $this->successResponse('Product deleted successfully', [], 204);
+    }
+}
+```
+
+## API Routes
+
+Define API routes in `app/router/api.php`:
+
+```php
+<?php
+
+use App\Controllers\ProductApiController;
+use Sphp\Core\Router;
+
+$api = new Router();
+
+// Public routes
+$api->get('/api/products', ProductApiController::class, 'list');
+
+// Protected routes
+$api->post('/api/products', ProductApiController::class, 'create');
+$api->post('/api/products/{id}', ProductApiController::class, 'update');
+$api->post('/api/products/delete/{id}', ProductApiController::class, 'delete');
+
+$api->dispatch();
+```
+
+## Client Usage
+
+### Making Authenticated Requests
+
+```javascript
+// Login to get token
+const loginResponse = await fetch('http://localhost:8000/login', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    email: 'user@example.com',
+    password: 'password123'
+  })
+});
+
+const { access_token } = await loginResponse.json();
+
+// Use token for authenticated requests
+const response = await fetch('http://localhost:8000/api/products', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+    'Authorization': `Bearer ${access_token}`
+  },
+  body: JSON.stringify({
+    name: 'New Product',
+    price: 99.99
+  })
+});
+
+const result = await response.json();
+console.log(result); // { success: true, message: "Product created successfully", data: { id: 123 } }
+```
+
+## Best Practices
+
+1. **Always use jsonResponse methods**: Use `successResponse()`, `errorResponse()`, or `jsonResponse()` instead of manual JSON encoding
+2. **Call authenticate() for protected endpoints**: Ensures proper token validation and user authentication
+3. **Set CORS headers for public APIs**: Call `setCorsHeaders()` at the start of public endpoints
+4. **Use proper HTTP status codes**: 200 (OK), 201 (Created), 400 (Bad Request), 401 (Unauthorized), 404 (Not Found), 500 (Server Error)
+5. **Include meaningful error messages**: Help API consumers understand what went wrong
+6. **Return consistent response formats**: Use the standard success/error response structure

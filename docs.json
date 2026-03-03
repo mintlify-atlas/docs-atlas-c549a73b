@@ -78,6 +78,7 @@
             "pages": [
               "api/router",
               "api/controller",
+              "api/api-controller",
               "api/model",
               "api/view",
               "api/database"
